@@ -1,0 +1,186 @@
+GeoFS Ultra Graphics Proprietary License v1.0
+
+Copyright (c) 2026 Belgian Tech. All Rights Reserved.
+
+1. Definitions and Scope
+
+This GeoFS Ultra Graphics Proprietary License v1.0 ("License") governs your
+installation and use of the GeoFS Ultra Graphics enhancement plugin,
+including its proprietary source code, scripts, shaders, assets,
+documentation, visual effects, and accompanying materials (collectively,
+the "Software").
+
+"Copyright Holder" means Riley. "You" and "Your" mean the individual or
+legal entity installing, accessing, or using the Software.
+
+The Software is private intellectual property. It is licensed, not sold.
+Public availability of the Software, including through GitHub, a release
+page, or a Tampermonkey userscript, does not make it open-source software
+or grant rights beyond those expressly provided by this License.
+
+2. Acceptance
+
+By installing, accessing, or using the Software, You acknowledge that You
+have read and agree to be bound by this License.
+
+If You do not agree to these terms, You must not install, access, or use
+the Software and must delete any copies in Your possession or control.
+
+3. Limited License and Permitted Uses
+
+Subject to Your continued compliance with this License, the Copyright
+Holder grants You a limited, non-exclusive, non-transferable,
+non-sublicensable license to:
+
+1. Install and run the Software on devices under Your control solely for
+   Your own personal, non-commercial use.
+2. Make only those copies technically necessary for such authorized
+   installation and operation.
+3. Create and share screenshots and videos depicting the Software in
+   operation for non-commercial purposes, provided that doing so does not
+   distribute or disclose the Software's source code, shader files, or
+   standalone assets.
+
+Permission to create screenshots and videos does not authorize commercial
+exploitation, redistribution of the Software, or extraction or reuse of
+its underlying materials.
+
+No rights are granted by implication, estoppel, or otherwise. All rights
+not expressly granted are reserved by the Copyright Holder.
+
+4. Restrictions
+
+Except as expressly permitted by this License, separately authorized in
+writing by the Copyright Holder, or required by applicable law
+notwithstanding these restrictions, You must not:
+
+1. Use the Software for any commercial purpose.
+2. Redistribute, publish, share, sell, rent, lease, sublicense, or otherwise
+   provide copies of the Software to any other person or entity.
+3. Reupload or mirror any part of the Software on another repository,
+   website, hosting service, distribution platform, or other location.
+4. Modify, adapt, translate, or otherwise alter the Software or its source
+   code.
+5. Reverse engineer, decompile, disassemble, or otherwise attempt to
+   reconstruct or derive the Software's implementation.
+6. Fork the Software or create derivative works based on any part of it.
+7. Repackage, bundle, rebrand, or incorporate the Software into another
+   product, plugin, script, package, or distribution.
+8. Copy, extract, appropriate, or reuse source code, shaders, shader assets,
+   or other proprietary materials, except for copies technically
+   necessary for installation and operation permitted under Section 3.
+9. Use copyrighted assets included with the Software outside this project,
+   except as incidentally depicted in screenshots and videos permitted
+   under Section 3.
+10. Remove, obscure, replace, or alter copyright notices, ownership
+    statements, license notices, or other proprietary markings.
+
+These restrictions apply to the Software in whole and in part, whether
+distributed in original, modified, compiled, minified, or any other form.
+
+5. Ownership and Reservation of Rights
+
+As between You and the Copyright Holder, all right, title, and interest in
+the Software, including its proprietary source code, shaders, assets,
+documentation, and visual effects, remain the exclusive property of the
+Copyright Holder.
+
+No ownership rights or intellectual property rights are transferred to
+You. Permission to use the Software or create screenshots and videos does
+not transfer ownership of any underlying Software materials.
+
+6. Third-Party Materials
+
+This License applies only to materials owned by the Copyright Holder or
+that the Copyright Holder is authorized to license under these terms.
+
+Any third-party software, libraries, assets, trademarks, or other
+materials remain the property of their respective owners and are governed
+by their applicable licenses and terms. This License does not replace,
+restrict, or override rights granted under those separate licenses.
+
+No ownership of GeoFS or any third-party platform, engine, or component is
+claimed by this License.
+
+7. Commercial Licensing
+
+Any commercial use of the Software requires prior written authorization
+from the Copyright Holder.
+
+Commercial use includes use in connection with a business, paid service,
+commercial product, monetized content, advertising, sponsorship, or any
+activity intended to generate revenue or commercial advantage.
+
+Commercial licenses may be granted separately at the Copyright Holder's
+sole discretion and may be subject to additional terms, conditions, and
+fees. No commercial permission exists unless expressly granted in writing.
+
+8. Termination
+
+Any violation of this License immediately and automatically terminates
+all rights granted to You under it, without notice, to the extent
+permitted by applicable law.
+
+Upon termination, You must immediately cease all installation, access,
+and use of the Software and delete or destroy all copies, including
+partial copies, in Your possession or control.
+
+Termination does not affect any rights, claims, or remedies arising
+before termination. Provisions concerning ownership, restrictions,
+disclaimers, limitation of liability, and legal protection survive
+termination.
+
+9. Disclaimer of Warranties
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED
+"AS IS" AND "AS AVAILABLE," WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, TITLE, AND NON-INFRINGEMENT.
+
+THE COPYRIGHT HOLDER DOES NOT WARRANT THAT THE SOFTWARE WILL BE
+ERROR-FREE, UNINTERRUPTED, SECURE, OR COMPATIBLE WITH ANY PARTICULAR DEVICE,
+BROWSER, USERSCRIPT MANAGER, GEOFS VERSION, OR THIRD-PARTY SERVICE.
+
+10. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE COPYRIGHT HOLDER
+SHALL NOT BE LIABLE FOR ANY DAMAGES ARISING OUT OF OR RELATED TO THE
+INSTALLATION, USE, INABILITY TO USE, OR PERFORMANCE OF THE SOFTWARE.
+
+THIS EXCLUSION INCLUDES DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+CONSEQUENTIAL, AND PUNITIVE DAMAGES, LOSS OF DATA, LOSS OF PROFITS,
+BUSINESS INTERRUPTION, AND SYSTEM DAMAGE, REGARDLESS OF THE THEORY OF
+LIABILITY AND EVEN IF THE COPYRIGHT HOLDER HAS BEEN ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES.
+
+NOTHING IN THIS LICENSE EXCLUDES OR LIMITS LIABILITY THAT CANNOT LAWFULLY
+BE EXCLUDED OR LIMITED.
+
+11. International Copyright Protection
+
+The Software is protected by applicable national copyright laws and
+international copyright treaties and conventions, including the Berne
+Convention where applicable.
+
+These protections apply internationally to the extent recognized under
+applicable law. Unauthorized copying, distribution, modification, or
+other exploitation may give rise to civil remedies or other legal
+consequences.
+
+12. General Provisions
+
+This License constitutes the entire agreement concerning the rights
+granted here, except for any separate written agreement with the
+Copyright Holder.
+
+If any provision is held invalid or unenforceable, it shall be enforced
+to the maximum extent permitted by law, and the remaining provisions
+shall remain in effect.
+
+Failure to enforce any provision does not constitute a waiver of that
+provision or any other right.
+
+Nothing in this License limits rights that applicable law does not permit
+to be waived or restricted.
+
+Copyright (c) 2026 Riley. All Rights Reserved.
