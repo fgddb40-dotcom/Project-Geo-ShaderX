@@ -1,0 +1,29 @@
+{
+  "name": "ULTRA",
+  "description": "Ultra: maximum sample counts, full-detail clouds and long draw distance. High-end GPUs only.",
+  "settings": {
+    "hdrEnabled": true,
+    "bloomEnabled": true,
+    "atmosphereEnabled": true,
+    "atmosphereSteps": 20,
+    "fogEnabled": true,
+    "cloudsEnabled": true,
+    "cloudSteps": 96,
+    "cloudResolution": "0.75",
+    "cloudDistance": 140000,
+    "cirrusEnabled": true,
+    "cloudShadows": true,
+    "godraysEnabled": true,
+    "godraysSamples": 96,
+    "gradeEnabled": true,
+    "ssaoEnabled": true,
+    "ssaoSamples": 24,
+    "reflectionsEnabled": true,
+    "waterEnabled": true,
+    "lensFlareEnabled": true,
+    "streaksEnabled": true,
+    "chromaticEnabled": true,
+    "vignetteEnabled": true,
+    "bloomRadius": 1.4
+  }
+}

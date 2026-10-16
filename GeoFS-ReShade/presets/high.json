@@ -1,0 +1,29 @@
+{
+  "name": "HIGH",
+  "description": "High: every effect enabled with moderate sample counts. Recommended for dedicated GPUs.",
+  "settings": {
+    "hdrEnabled": true,
+    "bloomEnabled": true,
+    "atmosphereEnabled": true,
+    "atmosphereSteps": 12,
+    "fogEnabled": true,
+    "cloudsEnabled": true,
+    "cloudSteps": 48,
+    "cloudResolution": "0.5",
+    "cloudDistance": 80000,
+    "cirrusEnabled": true,
+    "cloudShadows": true,
+    "godraysEnabled": true,
+    "godraysSamples": 48,
+    "gradeEnabled": true,
+    "ssaoEnabled": true,
+    "ssaoSamples": 12,
+    "reflectionsEnabled": true,
+    "waterEnabled": true,
+    "lensFlareEnabled": true,
+    "streaksEnabled": true,
+    "chromaticEnabled": true,
+    "vignetteEnabled": true,
+    "bloomRadius": 1.2
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "MEDIUM",
+  "description": "Balanced: adds bloom, volumetric clouds at low resolution, water and lens flare.",
+  "settings": {
+    "hdrEnabled": true,
+    "bloomEnabled": true,
+    "atmosphereEnabled": true,
+    "atmosphereSteps": 10,
+    "fogEnabled": true,
+    "cloudsEnabled": true,
+    "cloudSteps": 28,
+    "cloudResolution": "0.33",
+    "cloudDistance": 60000,
+    "cirrusEnabled": true,
+    "cloudShadows": true,
+    "godraysEnabled": false,
+    "godraysSamples": 32,
+    "gradeEnabled": true,
+    "ssaoEnabled": false,
+    "ssaoSamples": 8,
+    "reflectionsEnabled": true,
+    "waterEnabled": true,
+    "lensFlareEnabled": true,
+    "streaksEnabled": false,
+    "chromaticEnabled": false,
+    "vignetteEnabled": true,
+    "bloomRadius": 1.1
+  }
+}

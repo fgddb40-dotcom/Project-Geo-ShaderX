@@ -1,0 +1,29 @@
+{
+  "name": "LOW",
+  "description": "Lightweight: tonemapping, color grading, fog and a cheap sky. Best for integrated GPUs.",
+  "settings": {
+    "hdrEnabled": true,
+    "bloomEnabled": false,
+    "atmosphereEnabled": true,
+    "atmosphereSteps": 6,
+    "fogEnabled": true,
+    "cloudsEnabled": false,
+    "cloudSteps": 16,
+    "cloudResolution": "0.25",
+    "cloudDistance": 40000,
+    "cirrusEnabled": false,
+    "cloudShadows": false,
+    "godraysEnabled": false,
+    "godraysSamples": 16,
+    "gradeEnabled": true,
+    "ssaoEnabled": false,
+    "ssaoSamples": 6,
+    "reflectionsEnabled": false,
+    "waterEnabled": false,
+    "lensFlareEnabled": false,
+    "streaksEnabled": false,
+    "chromaticEnabled": false,
+    "vignetteEnabled": true,
+    "bloomRadius": 1
+  }
+}
