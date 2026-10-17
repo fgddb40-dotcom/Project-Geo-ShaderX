@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // GeoFS-ReShade : build.js
-// Inlines shaders/*.glsl, presets/*.json and ui/*.js into the BUILD regions of
-// main.user.js so the Tampermonkey script is a single self-contained file
-// (Tampermonkey with @grant none cannot fetch local files).
+// Inlines shaders/*.glsl, assets/*, presets/*.json and ui/*.js into the BUILD
+// regions of main.user.js so the Tampermonkey script is self-contained.
 //
 // Usage:  node build.js          rebuild main.user.js in place
 //         node build.js --check  exit 1 if main.user.js is out of date
@@ -46,6 +45,26 @@ function shadersRegion() {
     return 'NS.shaderSources = {\n' + body + '\n};';
 }
 
+function assetsRegion() {
+    const assets = {};
+    const dir = path.join(ROOT, 'assets');
+    fs.readdirSync(dir).sort().forEach(function (file) {
+        const ext = path.extname(file).toLowerCase();
+        const mime = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' :
+            ext === '.png' ? 'image/png' : null;
+        if (!mime) {
+            return;
+        }
+        const name = path.basename(file, ext);
+        assets[name] = 'data:' + mime + ';base64,' +
+            fs.readFileSync(path.join(dir, file)).toString('base64');
+    });
+    if (!assets.turbulence) {
+        throw new Error('assets/turbulence.jpg is required');
+    }
+    return 'NS.assetSources = ' + JSON.stringify(assets, null, 4) + ';';
+}
+
 function presetsRegion() {
     const presets = {};
     listFiles('presets', '.json').forEach(function (file) {
@@ -77,6 +96,7 @@ function replaceRegion(text, name, content) {
 function build() {
     let text = read('main.user.js');
     text = replaceRegion(text, 'shaders', shadersRegion());
+    text = replaceRegion(text, 'assets', assetsRegion());
     text = replaceRegion(text, 'presets', presetsRegion());
     text = replaceRegion(text, 'settings', moduleRegion('ui/settings.js'));
     text = replaceRegion(text, 'menu', moduleRegion('ui/menu.js'));

@@ -30,6 +30,7 @@ uniform vec4 u_cloudParams;   // x type (0 cirrus, 1 cumulus, 2 storm), y metres
 uniform vec4 u_cirrus;        // x altitude (m), y coverage 0..1, z opacity, w unused
 uniform vec4 u_weather;       // x overcast, y storm, z precipitation, w fog
 uniform vec4 u_moisture;      // x humidity, y wetness, z air temperature (C), w moon brightness
+uniform sampler2D u_turbulenceTex;
 
 const float CLOUD_PERIOD = 64.0;
 
@@ -100,7 +101,11 @@ float cloudDensity(vec3 pos, float lod)
         // Erosion: billowy (inverted Worley) at the top, wispy (fbm) at the base.
         vec3 qd = q * 8.0 + vec3(0.0, 0.0, u_time * 0.008);
         float billow = 1.0 - gfsr_worley3(qd, CLOUD_PERIOD * 8.0);
-        float wisp = gfsr_fbm3(qd * 2.0, CLOUD_PERIOD * 16.0, 2);
+        vec2 turbulenceUv = fract(vec2(
+            dot(qd, vec3(0.071, 0.023, 0.037)),
+            dot(qd, vec3(-0.019, 0.063, 0.041))
+        ));
+        float wisp = texture2D(u_turbulenceTex, turbulenceUv).r;
         float detail = mix(wisp, billow, clamp(hf * 1.6, 0.0, 1.0));
         float erode = 0.42 * (1.0 - lod) * mix(1.0, 0.6, storm);
         d = gfsr_remap(d, detail * erode, 1.0, 0.0, 1.0);

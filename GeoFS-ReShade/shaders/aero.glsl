@@ -36,6 +36,7 @@ uniform vec4 u_trailInfo;     // x point count, y base width (m), z opacity, w s
 uniform vec4 u_weather;
 uniform vec4 u_moisture;
 uniform sampler2D u_mieLut;   // Lorenz-Mie phase table (see common.glsl)
+uniform sampler2D u_turbulenceTex;
 
 // Ray / sphere: returns (tNear, tFar), tFar < 0 when missed.
 vec2 sphereHit(vec3 ro, vec3 rd, vec3 c, float r)
@@ -97,8 +98,13 @@ vec4 plume(vec3 rd, float tScene, vec4 nozzle, float jitter, float steps)
         float R = rn * (1.0 + 0.11 * s / rn);
         float flowT = u_time * 55.0;
         vec3 q = p / D;
-        float turb = gfsr_noise3(q * 1.7 - axis * flowT * 0.35 / D + vec3(0.0, 0.0, u_time), 64.0);
-        float turb2 = gfsr_noise3(q * 4.3 - axis * flowT * 0.8 / D, 64.0);
+        vec3 flowQ = q - axis * flowT * 0.35 / D;
+        vec2 turbulenceUv = fract(vec2(
+            dot(flowQ, vec3(0.071, 0.023, 0.037)) + u_time * 0.013,
+            dot(flowQ, vec3(-0.019, 0.063, 0.041)) - u_time * 0.009
+        ));
+        float turb = texture2D(u_turbulenceTex, turbulenceUv).r;
+        float turb2 = texture2D(u_turbulenceTex, fract(turbulenceUv * 2.17 + vec2(0.37, 0.61))).r;
         float tn = turb * 0.65 + turb2 * 0.35;
 
         // Heat haze envelope (present with dry thrust too).

@@ -1,7 +1,7 @@
 # GeoFS Ultra Graphics (GeoFS-ReShade)
 
-A Tampermonkey userscript that overhauls [GeoFS](https://www.geo-fs.com/)
-rendering with physically based post-processing on top of CesiumJS
+A Tampermonkey userscript for GeoFS 4.0 that overhauls
+[GeoFS](https://www.geo-fs.com/) rendering with physically based post-processing on top of CesiumJS
 `PostProcessStage`s. The priorities, in order, are physical realism,
 atmospheric realism, scale, smoothness and immersion. Saturation, bloom and
 "cinematic" filters come last.
@@ -11,8 +11,9 @@ atmospheric realism, scale, smoothness and immersion. Saturation, bloom and
 1. Install [Tampermonkey](https://www.tampermonkey.net/).
 2. Create a new script and paste the contents of `main.user.js`. The file is
    self-contained: shaders, UI and presets are embedded in it.
-3. Open GeoFS. The script waits for `window.geofs` and `window.Cesium`, then
-   attaches to `geofs.api.viewer.scene`.
+3. Open GeoFS 4.0. The script waits for `window.geofs` and `window.Cesium`, then
+   attaches to `geofs.api.viewer.scene` (the viewer path used by GeoFS' Cesium
+   integration and its existing post-processing hooks).
 
 Press **SHIFT + G** to open the settings panel. Settings are saved in
 `localStorage` under `gfsr.settings.v2`.
@@ -39,6 +40,13 @@ The passes run in this order:
 | Eye adaptation and tonemap | Log-average metering at 1/16 resolution; ACES filmic curve with a film toe and shoulder | `shaders/tonemap.glsl` |
 | Colour grading | Neutral "Realistic" by default; MSFS, DCS, Cinematic and Photographic looks are optional | `shaders/colorgrade.glsl` |
 | Lens | Flare, chromatic aberration and vignette (all subtle or off by default) | `shaders/lens.glsl` |
+
+The supplied `noiseturbulence8.jpg` is bundled as `assets/turbulence.jpg` and
+embedded into the userscript. Its tiled detail texture drives high-frequency
+cloud erosion and afterburner mixing, replacing the corresponding expensive
+procedural noise samples. The supplied Mie images are visual references; the
+plugin computes the Lorenz-Mie phase LUT used by the shaders rather than
+sampling those rendered previews as if they were LUT data.
 
 `shaders/common.glsl` holds the shared helpers: depth reconstruction, noise
 (value, FBM, Worley, interleaved gradient), the atmosphere model, phase functions,
@@ -119,7 +127,7 @@ literally:
 
 ## Development
 
-The files in `shaders/`, `ui/` and `presets/` are the sources. After editing
+The files in `shaders/`, `assets/`, `ui/` and `presets/` are the sources. After editing
 them, regenerate the embedded copies inside `main.user.js`:
 
 ```sh
