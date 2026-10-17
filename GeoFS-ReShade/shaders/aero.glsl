@@ -35,6 +35,7 @@ uniform vec4 u_trailB[16];
 uniform vec4 u_trailInfo;     // x point count, y base width (m), z opacity, w spread per point
 uniform vec4 u_weather;
 uniform vec4 u_moisture;
+uniform sampler2D u_mieLut;   // Lorenz-Mie phase table (see common.glsl)
 
 // Ray / sphere: returns (tNear, tFar), tFar < 0 when missed.
 vec2 sphereHit(vec3 ro, vec3 rd, vec3 c, float r)
@@ -195,7 +196,10 @@ vec4 vapor(vec3 rd, float tScene, vec3 sunEC, vec3 skyLight, vec3 sunLight, floa
     float trans = 1.0;
     vec3 col = vec3(0.0);
     float cosT = dot(rd, sunEC);
-    float phase = gfsr_phaseHG(cosT, 0.75) * 0.6 + gfsr_phaseHG(cosT, -0.2) * 0.4;
+    // Micron-sized condensation droplets: Lorenz-Mie phase gives the faint
+    // iridescent fringes seen on real vapour cones.
+    vec3 phase = mix(vec3(gfsr_phaseHG(cosT, 0.75) * 0.6 + gfsr_phaseHG(cosT, -0.2) * 0.4),
+                     min(gfsr_mieLut(u_mieLut, cosT, 0.0, 0.80), vec3(4.0)), 0.65);
     for (int i = 0; i < 20; i++) {
         float t = t0 + (float(i) + jitter) * dt;
         float d = vaporDensity(rd * t);

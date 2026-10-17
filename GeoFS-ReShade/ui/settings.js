@@ -94,7 +94,8 @@
                 { key: 'fogStart', type: 'range', label: 'Distance (start, m)', default: 3000, min: 0, max: 30000, step: 100 },
                 { key: 'fogMaxDistance', type: 'range', label: 'Horizon distance (m)', default: 120000, min: 10000, max: 400000, step: 1000 },
                 { key: 'fogColor', type: 'color', label: 'Color', default: '#c3d0df' },
-                { key: 'fogSkyTint', type: 'range', label: 'Sun-lit tint', default: 0.7, min: 0.0, max: 1.0, step: 0.01 }
+                { key: 'fogSkyTint', type: 'range', label: 'Sun-lit tint', default: 0.7, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'dropletOptics', type: 'range', label: 'Droplet optics (rainbow, fogbow, glory)', default: 1.0, min: 0.0, max: 2.0, step: 0.01 }
             ]
         },
         {
@@ -230,7 +231,9 @@
         {
             id: 'night', title: 'Night Lighting', controls: [
                 { key: 'nightLightsEnabled', type: 'checkbox', label: 'City lights (NASA Black Marble)', default: true },
-                { key: 'cityLights', type: 'range', label: 'City light intensity', default: 1.0, min: 0.0, max: 2.0, step: 0.01 }
+                { key: 'cityLights', type: 'range', label: 'City light intensity', default: 1.0, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'skyGlow', type: 'range', label: 'Light pollution (haze dome, lit cloud bases)', default: 1.0, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'ledShare', type: 'range', label: 'Street lighting: sodium (0) to LED (1)', default: 0.35, min: 0.0, max: 1.0, step: 0.01 }
             ]
         },
         {

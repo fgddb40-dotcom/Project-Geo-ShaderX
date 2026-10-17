@@ -12,9 +12,11 @@
 //     towards the sun; sharp near the occluder, soft with distance)
 //   * Elevation / slope / humidity driven materials: grass, dirt, rock, snow,
 //     sand micro-detail in world-locked coordinates (no blurry imagery)
-//   * Forest canopy: per-tree crowns (Worley cells) with varied size and
-//     colour, sun-shaded domes, shadowed gaps, LOD to a volumetric canopy
-//     response (darker shadow side + opposition hotspot) at altitude
+//   * Forest canopy: a two-layer 3D crown height field (8 m crowns over a
+//     3.2 m understory) with sun-facing crown normals, crown-to-crown cast
+//     shadows marched towards the sun, interior occlusion, leaf clumps and
+//     back-lit translucency; multi-scale bushy clustering plus the canopy
+//     hotspot response at altitude
 //   * Wet surfaces: darkened porous ground, puddles, rain ripples and
 //     screen-space reflections on wet runways
 //
@@ -25,6 +27,7 @@ uniform sampler2D colorTexture;
 uniform sampler2D depthTexture;
 varying vec2 v_textureCoordinates;
 
+uniform sampler2D u_acMask;      // aircraft mask (r), see mask.glsl
 uniform mat3 u_eyeToEnu;
 uniform float u_camHeight;
 uniform float u_time;
@@ -89,6 +92,47 @@ float screenShadow(vec3 pEC, vec3 lEC, float dist, float steps, float jitter)
     return 1.0 - occl;
 }
 
+// Canopy height field: tall crowns on an 8 m Worley grid over a 3.2 m
+// understory layer (both tile WORLD_PERIOD exactly). Each crown is a
+// half-ellipsoid. Returns (height m, dh/dx, dh/dy, crown id of the top layer).
+vec4 canopy(vec2 q)
+{
+    vec4 a = gfsr_worley2(q / 8.0, WORLD_PERIOD / 8.0);
+    float ra = 0.40 + 0.28 * a.y;
+    float ea = max(1.0 - a.x * a.x / (ra * ra), 0.0);
+    float topA = 12.0 + 10.0 * a.y;
+    float ha = topA * sqrt(ea);
+    vec4 b = gfsr_worley2(q / 3.2, WORLD_PERIOD / 3.2);
+    float rb = 0.45 + 0.25 * b.y;
+    float eb = max(1.0 - b.x * b.x / (rb * rb), 0.0);
+    float topB = 3.0 + 4.0 * b.y;
+    float hb = topB * sqrt(eb);
+    // dh/dp of T*sqrt(1 - |f-p|^2/r^2), with off = f - p in cell units.
+    if (ha >= hb) {
+        vec2 g = topA * a.zw / (ra * ra * 8.0 * max(sqrt(ea), 0.12));
+        return vec4(ha, g, a.y);
+    }
+    vec2 g = topB * b.zw / (rb * rb * 3.2 * max(sqrt(eb), 0.12));
+    return vec4(hb, g, b.y);
+}
+
+// Soft sun shadow cast by neighbouring crowns onto the canopy point at height h0.
+float canopyShadow(vec2 q, float h0, vec3 sunDir, float jitter)
+{
+    float horiz = max(length(sunDir.xy), 1e-3);
+    vec2 sd = sunDir.xy / horiz;
+    float tanE = max(sunDir.z, 0.02) / horiz;
+    float sh = 1.0;
+    float s = 1.2 + jitter * 0.8;
+    for (int i = 0; i < 4; i++) {
+        float hs = canopy(q + sd * s).x;
+        float above = hs - (h0 + s * tanE);
+        sh = min(sh, clamp(1.0 - above / 1.8, 0.0, 1.0));
+        s *= 1.85;
+    }
+    return sh;
+}
+
 void main()
 {
     vec2 uv = v_textureCoordinates;
@@ -101,7 +145,7 @@ void main()
 
     vec3 pEC = gfsr_eyePosition(depthTexture, uv);
     float dist = length(pEC);
-    float acMask = gfsr_aircraftMask(dist, u_aircraftDistance, max(u_aircraftRadius, 1.0));
+    float acMask = texture2D(u_acMask, uv).r;
     if (acMask > 0.5) {
         gl_FragColor = src;
         return;
@@ -189,29 +233,49 @@ void main()
     }
 
     // ---------------- Forest canopy -----------------
+    // Near: a 3D canopy height field (two crown layers) lit with sun-facing
+    // crown normals, crown-to-crown cast shadows marched towards the sun,
+    // interior occlusion, leaf-clump texture and back-lit translucency.
+    // Far: multi-scale bushy clustering band-limited to the pixel footprint.
     float fk = u_terrain.w * forest * dFade;
     if (fk > 0.0) {
-        float crownVis = 1.0 - smoothstep(1.8, 7.0, footprint);
+        float crownVis = 1.0 - smoothstep(2.0, 8.0, footprint);
+        float sunE = (1.0 - overcast * 0.8) * smoothstep(-0.02, 0.15, sunDir.z) + 0.04;
+        float amb = 0.38 + overcast * 0.5 + humidity * 0.1;
+        float flatLit = amb + sunE * max(sunDir.z, 0.0);
         if (crownVis > 0.0) {
-            vec4 w = gfsr_worley2(wp / 7.0, WORLD_PERIOD / 7.0);
-            float size = 0.45 + 0.25 * w.y;
-            float dome = 1.0 - smoothstep(size * 0.6, size, w.x);
-            vec3 cn = normalize(vec3(-w.zw / max(size, 0.2) * 1.4, max(dome, 0.15)));
-            float crownLight = 0.55 + 0.75 * max(dot(cn, sunDir), 0.0) * day;
-            // Gaps between crowns are in the canopy's own shadow.
-            float gap = smoothstep(size * 0.7, size * 1.1, w.x);
-            float sideShadow = smoothstep(0.0, 0.6, dot(normalize(w.zw + 1e-4), sunDir.xy)) * gap;
-            float tree = mix(crownLight, 0.35, max(gap * 0.7, sideShadow * 0.5));
-            vec3 tint = mix(vec3(0.92, 1.0, 0.85), vec3(1.08, 1.02, 0.9), w.y);
-            vec3 crowned = col * tree * tint * (0.85 + 0.3 * gfsr_hash12(floor(wp / 7.0)));
+            vec4 cz = canopy(wp);
+            vec3 cn = normalize(vec3(-cz.yz, 1.0));
+            float sh = 1.0;
+            if (sunDir.z > 0.0 && day > 0.0) {
+                sh = canopyShadow(wp, cz.x, sunDir, jitter);
+            }
+            // Gaps and low understory sit deep inside the canopy.
+            float ao = mix(0.35, 1.0, smoothstep(0.0, 14.0, cz.x));
+            // Leaf clumps: two band-limited octaves, stronger contrast in sunlight.
+            float clump = detailNoise(wp + cz.w * 37.0, 0.9, footprint) * 0.6 + detailNoise(wp, 2.3, footprint) * 0.4;
+            float lit = amb * (0.55 + 0.45 * cn.z) * ao + sunE * max(dot(cn, sunDir), 0.0) * sh * (0.7 + 0.6 * clump);
+            float tree = clamp(lit / max(flatLit, 0.05), 0.15, 2.0);
+            // Species / health variation: conifer blue-green to broadleaf yellow-green.
+            vec3 tint = mix(vec3(0.82, 0.97, 0.93), vec3(1.10, 1.06, 0.80), cz.w) * (0.86 + 0.28 * gfsr_hash12(floor(wp / 8.0)));
+            vec3 crowned = col * tree * tint;
+            // Translucent leaves glow at crown edges when looking towards the sun.
+            float back = pow(clamp(-dot(V, sunDir), 0.0, 1.0), 3.0);
+            float thin = 1.0 - smoothstep(0.0, 10.0, cz.x);
+            crowned += col * vec3(0.55, 0.95, 0.25) * back * (0.35 + 0.65 * thin) * sh * day * (1.0 - overcast) * 0.9;
             col = mix(col, crowned, fk * crownVis);
         }
-        // Volumetric canopy response at distance: rough surface darkens the
-        // side away from the sun; looking down-sun shows the bright hotspot.
+        // Mid / far: bushy multi-scale clusters keep the canopy volumetric from
+        // altitude; rough surfaces darken the side away from the sun and
+        // looking down-sun reveals the shadow-hiding hotspot.
         float hot = exp(-max(1.0 - dot(V, sunDir), 0.0) * 40.0);
-        float rough = mix(0.82, 1.0, clamp(dot(N, sunDir) * 1.5 + 0.3, 0.0, 1.0));
-        float cluster = 0.88 + 0.24 * detailNoise(wp, 60.0, footprint * 0.2);
-        col *= mix(1.0, rough * cluster * (1.0 + hot * 0.35), fk * (1.0 - smoothstep(0.0, 4.0, footprint) * 0.2));
+        float rough = mix(0.80, 1.0, clamp(dot(N, sunDir) * 1.5 + 0.3, 0.0, 1.0));
+        float c1 = detailNoise(wp, 22.0, footprint);
+        float c2 = detailNoise(wp, 70.0, footprint);
+        float c3 = detailNoise(wp, 230.0, footprint);
+        float cluster = (0.80 + 0.40 * c1) * (0.88 + 0.24 * c2) * (0.92 + 0.16 * c3);
+        float farK = fk * (1.0 - crownVis * 0.7);
+        col *= mix(1.0, rough * cluster * (1.0 + hot * 0.35), farK);
     }
 
     // ---------------- Lighting -----------------

@@ -23,13 +23,14 @@ The passes run in this order:
 
 | Pass | What it does | Source |
 | --- | --- | --- |
-| Terrain | Normal reconstruction from depth; slope-, altitude- and humidity-driven grass, dirt, rock, snow and sand tinting; forest canopy relief and depth; terrain AO; screen-space contact shadows; wet ground and puddles | `shaders/terrain.glsl` |
+| Aircraft mask | Per-pixel Cesium pick-ID mask for aircraft models, with a depth-bounds fallback if GeoFS has not exposed a loaded glTF model | `shaders/mask.glsl` |
+| Terrain | Normal reconstruction from depth; slope-, altitude- and humidity-driven grass, dirt, rock, snow and sand tinting; two-scale 3D forest crowns, understory, canopy self-shadowing and translucency; terrain AO; screen-space contact shadows; wet ground and puddles | `shaders/terrain.glsl` |
 | SSAO | Hemisphere AO from depth and reconstructed normals | `shaders/ssao.glsl` |
 | Water | Sky, cloud and sun reflections, SSR, specular glint, deep-water colour, distance fade | `shaders/water.glsl` |
 | Reflections / PBR | Fresnel, roughness, SSR over an analytic sky environment, metal, paint and canopy response; wetness | `shaders/reflections.glsl` |
 | Atmosphere and sky | Rayleigh and Mie single scattering with ozone; aerial perspective and extinction; altitude-dependent sky with a dark zenith at high altitude; planet curvature; twinkling, extinguished stars with colour variation; Milky Way; moonlight | `shaders/atmosphere.glsl` |
-| Depth fog | Height fog and moisture-driven mist; `1 - exp(-distance * density)` | `shaders/fog.glsl` |
-| Volumetric clouds | Ray-marched FBM and Worley density with erosion; cirrus, cumulus and storm layers; Beer–powder lighting, dual-lobe HG forward scattering, multiple-scattering approximation, silver lining, cloud shadows; blue-noise jitter; adaptive steps and empty-space skipping | `shaders/clouds.glsl` |
+| Depth fog | Height fog and moisture-driven mist; `1 - exp(-distance * density)`; Lorenz-Mie fogbow and rainbows; sodium/LED light-pollution dome | `shaders/fog.glsl` |
+| Volumetric clouds | Ray-marched FBM and Worley density with erosion; cirrus, cumulus and storm layers; Beer-powder lighting, dual-lobe HG forward scattering, multiple-scattering approximation, Lorenz-Mie cloudbow/glory, ice-crystal halo, silver lining, cloud shadows; blue-noise jitter; altitude- and camera-pan-adaptive steps, empty-space skipping, depth-aware Gaussian upsample | `shaders/clouds.glsl` |
 | Aero | Afterburner plume (temperature gradient, shock diamonds, turbulence, heat haze), vapor cone, high-G and AoA wing vapor, world-locked wingtip vortices and contrails | `shaders/aero.glsl` |
 | Cockpit rain | Droplets that accumulate, streak with airspeed, refract and reflect | `shaders/cockpit.glsl` (`rain_glass`) |
 | Cockpit light | Sun penetration, bounce light, soft shadows, instrument glow and night adaptation | `shaders/cockpit.glsl` (`cockpit_light`) |
@@ -40,8 +41,12 @@ The passes run in this order:
 | Lens | Flare, chromatic aberration and vignette (all subtle or off by default) | `shaders/lens.glsl` |
 
 `shaders/common.glsl` holds the shared helpers: depth reconstruction, noise
-(value, FBM, Worley, interleaved gradient), the atmosphere model, phase functions
-and black-body colour. Shaders are written in GLSL ES 1.00. Cesium 1.102+
+(value, FBM, Worley, interleaved gradient), the atmosphere model, phase functions,
+Lorenz-Mie lookup and screen-space city glow. The droplet phase LUT is computed
+once per browser in a Web Worker, cached in localStorage and used by fog,
+clouds and condensation. Until it is ready, scattering falls back to
+Henyey-Greenstein. A chunked main-thread fallback is used if Blob workers are
+blocked. Shaders are written in GLSL ES 1.00. Cesium 1.102+
 converts them to GLSL ES 3.00; the pipeline is tested on Cesium 1.96 and 1.125.
 
 ### Native engine integration (outside the post-process chain)
@@ -52,7 +57,8 @@ converts them to GLSL ES 3.00; the pipeline is tested on Cesium 1.96 and 1.125.
 - **Shadows**: Cesium soft shadow maps (PCF) at a resolution set by
   `shadowQuality`, plus FXAA.
 - **Night lighting**: a NASA Black Marble (VIIRS) city-lights layer is faded in
-  after dusk. City glow then scatters through the atmosphere and fog passes.
+  after dusk. Adjustable orange-to-white light pollution scatters through fog
+  and reflects from cloud bases.
 - **Moisture**: humidity is derived from GeoFS weather (cloud cover,
   precipitation and fog). It drives haze, cloud softness, wet-surface
   reflections and condensation. Ground and glass wetness build up in rain and
@@ -88,7 +94,9 @@ literally:
   and true volumetric cloud shadow maps are not available. Contact shadows and
   cloud shadows are screen-space approximations.
 - **Forests and terrain materials** are reconstructed from depth and colour.
-  No new tree geometry or terrain textures are streamed.
+  The multi-scale canopy is a screen-space height field, not new tree geometry;
+  it cannot create silhouette parallax or cast real per-tree shadows, and no
+  replacement terrain textures are streamed.
 - **Aircraft PBR** cannot read GeoFS material data or add normal maps. It uses
   SH image-based lighting on the models plus a screen-space PBR, Fresnel and SSR
   pass.

@@ -215,6 +215,55 @@ float gfsr_phaseHG(float nu, float g)
     return (1.0 - g2) / (4.0 * GFSR_PI * pow(max(1.0 + g2 - 2.0 * g * nu, 1e-4), 1.5));
 }
 
+// Lorenz-Mie phase look-up table (computed at runtime by the plugin).
+// 2048x1 texture: four 512-texel segments (0 vapour 1.5um, 1 fog 5um,
+// 2 cloud 10um, 3 rain 0.35mm), u = scattering angle / pi. Each texel holds,
+// per R/G/B wavelength, log2(P_mie / P_HG(g)) mapped from [-6, 6] stops, so
+// glories, fog/cloud bows, rainbows and supernumeraries survive 8 bits.
+vec3 gfsr_mieRatio(sampler2D lut, float nu, float row)
+{
+    float th = acos(clamp(nu, -1.0, 1.0)) / GFSR_PI;
+    float u = (row * 512.0 + 0.5 + th * 511.0) / 2048.0;
+    vec3 t = texture2D(lut, vec2(u, 0.5)).rgb;
+    return exp2(t * 12.0 - 6.0);
+}
+
+// Spectral Mie phase function (same 1/4pi normalisation as gfsr_phaseHG).
+vec3 gfsr_mieLut(sampler2D lut, float nu, float row, float g)
+{
+    return gfsr_phaseHG(nu, g) * gfsr_mieRatio(lut, nu, row);
+}
+
+// Night light pollution: average artificial emission around uv, gathered
+// from a two-ring disk with a bias towards `down` (screen direction where the
+// light sources sit). Only pixels brighter than the night background count.
+// `led` blends the sodium-orange tint of older street lighting with the cool
+// white of LED lighting.
+vec3 gfsr_screenGlow(sampler2D tex, sampler2D depthTex, vec2 uv, vec2 radius, vec2 down, float led)
+{
+    vec3 sum = vec3(0.0);
+    for (int i = 0; i < 8; i++) {
+        float fi = float(i);
+        float a = fi * 2.39996 + 0.5;
+        float rr = (i < 4) ? 0.45 : 1.0;
+        vec2 o = vec2(cos(a), sin(a)) * rr;
+        vec2 suv = clamp(uv + (o + down) * radius, vec2(0.001), vec2(0.999));
+        if (gfsr_isSkyDepth(gfsr_rawDepth(depthTex, suv))) {
+            continue;
+        }
+        vec3 c = texture2D(tex, suv).rgb;
+        // Black Marble emits warm/yellow pixels; reject clouds, stars, and
+        // aircraft paint so this is a city-light blur, not a screen smear.
+        float warm = smoothstep(0.015, 0.11, c.r - c.b) * smoothstep(0.015, 0.09, c.g - c.b);
+        float bright = smoothstep(0.14, 0.42, max(c.r, max(c.g, c.b)));
+        sum += max(c - vec3(0.08), vec3(0.0)) * warm * bright;
+    }
+    sum /= 8.0;
+    float l = dot(sum, vec3(0.2126, 0.7152, 0.0722));
+    vec3 tint = mix(vec3(1.0, 0.58, 0.26), vec3(0.86, 0.92, 1.0), clamp(led, 0.0, 1.0)) * l;
+    return mix(sum, tint, 0.6);
+}
+
 // ---------------------------------------------------------------------------
 // Planet / atmosphere geometry (km, numerically stable for float32)
 // ---------------------------------------------------------------------------

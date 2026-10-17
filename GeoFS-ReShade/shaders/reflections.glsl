@@ -1,9 +1,10 @@
 // GeoFS-ReShade : reflections.glsl
 // Approximate image-based reflections on the aircraft, without model edits.
 //
-// Aircraft pixels are isolated using the known camera -> aircraft distance
-// (provided every frame from JavaScript): every surface within the aircraft's
-// bounding radius receives
+// Aircraft pixels come from the per-pixel aircraft mask (mask.glsl): the
+// pick-id selection of the GeoFS aircraft models, or a depth shell around the
+// aircraft's bounding sphere when the models cannot be found. Every airframe
+// pixel receives
 //   * Schlick Fresnel (configurable power)
 //   * environment reflection sampled from the analytic sky (Rayleigh + Mie),
 //     with a ground hemisphere below the horizon
@@ -18,6 +19,7 @@ uniform sampler2D colorTexture;
 uniform sampler2D depthTexture;
 varying vec2 v_textureCoordinates;
 
+uniform sampler2D u_acMask;       // aircraft mask (r), see mask.glsl
 uniform mat3 u_eyeToEnu;
 uniform float u_camHeight;
 uniform vec2 u_texel;
@@ -67,13 +69,9 @@ void main()
     float dist = length(pEC);
     float r = max(u_aircraftRadius, 1.0);
     float cockpit = 1.0 - smoothstep(r * 0.6, r, u_aircraftDistance);
-    float nearD = u_aircraftDistance - r;
-    float farD = u_aircraftDistance + r;
-    float edge = r * 0.15;
-    float inside = smoothstep(nearD - edge, nearD + edge, dist) * (1.0 - smoothstep(farD - edge, farD + edge, dist));
-    // Cockpit view: only the visible airframe close to the camera.
-    float cockpitMask = 1.0 - smoothstep(r * 0.9, r * 1.2, dist);
-    float mask = mix(inside, cockpitMask * 0.35, cockpit);
+    // Exact airframe pixels (pick-id selection, or the depth-shell fallback);
+    // only the visible airframe close to the camera in the cockpit view.
+    float mask = texture2D(u_acMask, uv).r * mix(1.0, 0.35, cockpit);
     if (mask <= 0.001) {
         gl_FragColor = src;
         return;

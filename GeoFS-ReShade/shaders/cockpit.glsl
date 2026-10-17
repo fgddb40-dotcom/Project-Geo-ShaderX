@@ -43,6 +43,11 @@ vec2 hash22(vec2 p)
 void addDrop(vec2 p, vec2 c, vec2 r, float a, inout float F, inout vec2 G)
 {
     vec2 d = (p - c) / r;
+    // Irregular outline: real drops pin on dirt and are never perfect ellipses.
+    float h = gfsr_hash12(floor(c * 7.0) + 0.37);
+    float ang = atan(d.y, d.x);
+    float k = 1.0 + 0.14 * sin(3.0 * ang + h * 6.2832) + 0.07 * sin(5.0 * ang + h * 17.0);
+    d *= k;
     float e = a * exp(-dot(d, d) * 3.0);
     F += e;
     G += e * -6.0 * d / r;
@@ -148,6 +153,13 @@ void main()
     staticLayer(p, 21.0, stDensity, t * 1.3, 7.0, F2, G2);
     F += F2 * 0.8;
     G += G2 * 0.8;
+    // Micro-beads: fine mist of tiny droplets that sits between the large drops.
+    float F3 = 0.0;
+    vec2 G3 = vec2(0.0);
+    float mistD = clamp(stDensity * 1.1 + wetGlass * 0.3, 0.0, 0.95);
+    staticLayer(p, 58.0, mistD, t * 0.7, 13.0, F3, G3);
+    F += F3 * 0.9;
+    G += G3 * 0.35;
 
     float wet = 0.0;
     // Gravity streaks (slow, vertical).
@@ -180,7 +192,7 @@ void main()
         wet = max(wet, wa * sf);
     }
 
-    float drop = smoothstep(0.45, 0.75, F) * glass;
+    float drop = smoothstep(0.48, 0.62, F) * glass;
     vec2 n = -G * 0.012;
     n = n / (1.0 + length(n) * 3.0);
 
@@ -194,8 +206,12 @@ void main()
     bg += texture2D(colorTexture, uv - vec2(0.0, bl.y)).rgb * 0.15;
     vec3 base = mix(src.rgb, bg, film);
 
-    vec2 ruv = clamp(uv - n * vec2(1.0 / u_aspect, 1.0) * 0.9, vec2(0.001), vec2(0.999));
-    vec3 refr = texture2D(colorTexture, ruv).rgb;
+    // Each drop is a tiny lens: inverted, slightly dispersed view of the scene.
+    vec2 off = n * vec2(1.0 / u_aspect, 1.0) * 0.9;
+    vec3 refr;
+    refr.r = texture2D(colorTexture, clamp(uv - off * 0.97, vec2(0.001), vec2(0.999))).r;
+    refr.g = texture2D(colorTexture, clamp(uv - off, vec2(0.001), vec2(0.999))).g;
+    refr.b = texture2D(colorTexture, clamp(uv - off * 1.04, vec2(0.001), vec2(0.999))).b;
 
     // Lighting of the water surface.
     vec3 sunDir = normalize(u_eyeToEnu * czm_sunDirectionEC);
@@ -203,6 +219,11 @@ void main()
     vec3 sky = gfsr_toGamma(gfsr_skyApprox(vec3(0.0, 0.0, 1.0), sunDir, camHKm, u_weather.x));
     vec3 N3 = normalize(vec3(n * 3.0, 1.0));
     float hl = pow(max(dot(N3, normalize(vec3(-0.25, 0.55, 1.0))), 0.0), 60.0);
+    // Sun glint on each droplet when the sun is in front of the canopy.
+    vec3 sEC = normalize(czm_sunDirectionEC);
+    float sunFront = smoothstep(0.0, 0.3, -sEC.z) * smoothstep(-0.05, 0.1, sunDir.z) * (1.0 - u_weather.x * 0.7);
+    vec3 Ls = normalize(vec3(sEC.xy, abs(sEC.z) + 0.35));
+    hl += pow(max(dot(N3, Ls), 0.0), 140.0) * sunFront * 4.0;
     float rim = drop * (1.0 - smoothstep(0.5, 0.95, F));
 
     vec3 col = mix(base, refr * 0.92 + sky * 0.06, drop);
