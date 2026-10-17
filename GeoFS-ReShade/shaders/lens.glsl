@@ -87,12 +87,9 @@ void main()
     // Halo: chromatic ring centred on the sun.
     float dSun = length(p - s);
     float ringR = 0.32;
-    float ring = exp(-pow((dSun - ringR) * 28.0, 2.0));
-    vec3 haloCol = vec3(
-        exp(-pow((dSun - ringR * 1.02) * 30.0, 2.0)),
-        exp(-pow((dSun - ringR) * 30.0, 2.0)),
-        exp(-pow((dSun - ringR * 0.98) * 30.0, 2.0))
-    );
+    float ring = exp(-(dSun - ringR) * (dSun - ringR) * 784.0);
+    vec3 dr = vec3(dSun) - vec3(ringR * 1.02, ringR, ringR * 0.98);
+    vec3 haloCol = exp(-dr * dr * 900.0);
     flare += (haloCol * 0.6 + ring * 0.2) * 0.25 * u_halo;
 
     // Starburst: angular streaks around the sun from the aperture blades.

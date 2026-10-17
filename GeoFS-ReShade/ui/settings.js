@@ -9,7 +9,7 @@
 
     const NS = root.GeoFSReShade = root.GeoFSReShade || {};
 
-    const STORAGE_KEY = 'gfsr.settings.v1';
+    const STORAGE_KEY = 'gfsr.settings.v2';
     const PRESET_ORDER = ['low', 'medium', 'high', 'ultra'];
 
     // Control types: checkbox, range, select, color.
@@ -25,37 +25,65 @@
                 { key: 'fpsLow', type: 'range', label: 'Low FPS threshold', default: 40, min: 15, max: 60, step: 1 },
                 { key: 'fpsCritical', type: 'range', label: 'Critical FPS threshold', default: 25, min: 10, max: 45, step: 1 },
                 { key: 'hideNativeClouds', type: 'checkbox', label: 'Replace GeoFS native cloud/fog pass', default: true },
-                { key: 'modelLighting', type: 'checkbox', label: 'Boost aircraft environment lighting', default: true }
+                { key: 'modelLighting', type: 'checkbox', label: 'Aircraft image-based lighting (IBL)', default: true },
+                { key: 'engineTuning', type: 'checkbox', label: 'Engine tuning (soft shadow maps, FXAA)', default: true },
+                { key: 'shadowQuality', type: 'select', label: 'Shadow map resolution', default: '2048', options: [
+                    ['1024', '1024'], ['2048', '2048'], ['4096', '4096']
+                ] }
             ]
         },
         {
             id: 'hdr', title: 'HDR & Tonemapping', controls: [
                 { key: 'hdrEnabled', type: 'checkbox', label: 'HDR pipeline (ACES Filmic)', default: true, structural: true },
-                { key: 'exposure', type: 'range', label: 'HDR Exposure', default: 1.0, min: 0.2, max: 3.0, step: 0.01 },
+                { key: 'exposure', type: 'range', label: 'HDR Exposure', default: 1.1, min: 0.2, max: 3.0, step: 0.01 },
                 { key: 'gamma', type: 'range', label: 'Gamma', default: 1.0, min: 0.6, max: 1.6, step: 0.01 },
-                { key: 'contrast', type: 'range', label: 'Contrast', default: 1.05, min: 0.5, max: 1.6, step: 0.01 },
-                { key: 'saturation', type: 'range', label: 'Saturation', default: 1.08, min: 0.0, max: 2.0, step: 0.01 }
+                { key: 'contrast', type: 'range', label: 'Contrast', default: 1.0, min: 0.5, max: 1.6, step: 0.01 },
+                { key: 'saturation', type: 'range', label: 'Saturation', default: 0.96, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'eyeAdaptation', type: 'range', label: 'Eye adaptation', default: 0.45, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'adaptMinEV', type: 'range', label: 'Adaptation min (EV)', default: -1.0, min: -4.0, max: 0.0, step: 0.1 },
+                { key: 'adaptMaxEV', type: 'range', label: 'Adaptation max (EV)', default: 1.5, min: 0.0, max: 4.0, step: 0.1 },
+                { key: 'filmToe', type: 'range', label: 'Film toe', default: 0.5, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'filmShoulder', type: 'range', label: 'Film shoulder', default: 0.6, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'highlightExpansion', type: 'range', label: 'Highlight recovery', default: 0.55, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'purkinje', type: 'range', label: 'Night vision (Purkinje shift)', default: 0.6, min: 0.0, max: 1.0, step: 0.01 }
             ]
         },
         {
             id: 'bloom', title: 'Bloom', controls: [
                 { key: 'bloomEnabled', type: 'checkbox', label: 'Bloom', default: true, structural: true },
-                { key: 'bloomIntensity', type: 'range', label: 'Bloom Intensity', default: 0.55, min: 0.0, max: 3.0, step: 0.01 },
-                { key: 'bloomRadius', type: 'range', label: 'Bloom Radius', default: 1.2, min: 0.25, max: 4.0, step: 0.05 },
-                { key: 'bloomThreshold', type: 'range', label: 'Bloom Threshold', default: 0.72, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'bloomIntensity', type: 'range', label: 'Bloom Intensity', default: 0.15, min: 0.0, max: 3.0, step: 0.01 },
+                { key: 'bloomRadius', type: 'range', label: 'Bloom Radius', default: 1.0, min: 0.25, max: 4.0, step: 0.05 },
+                { key: 'bloomThreshold', type: 'range', label: 'Bloom Threshold', default: 0.86, min: 0.0, max: 1.0, step: 0.01 },
                 { key: 'bloomSoftKnee', type: 'range', label: 'Soft bloom (knee)', default: 0.5, min: 0.0, max: 1.0, step: 0.01 }
             ]
         },
         {
             id: 'atmosphere', title: 'Atmospheric Scattering', controls: [
                 { key: 'atmosphereEnabled', type: 'checkbox', label: 'Atmospheric scattering', default: true, structural: true },
-                { key: 'skyBlend', type: 'range', label: 'Sky replacement', default: 0.85, min: 0.0, max: 1.0, step: 0.01 },
-                { key: 'hazeStrength', type: 'range', label: 'Aerial haze', default: 0.6, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'skyBlend', type: 'range', label: 'Sky replacement', default: 1.0, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'hazeStrength', type: 'range', label: 'Aerial perspective', default: 0.85, min: 0.0, max: 2.0, step: 0.01 },
                 { key: 'rayleigh', type: 'range', label: 'Rayleigh scattering', default: 1.0, min: 0.2, max: 3.0, step: 0.01 },
                 { key: 'mie', type: 'range', label: 'Mie scattering', default: 1.0, min: 0.1, max: 4.0, step: 0.01 },
-                { key: 'horizonGlow', type: 'range', label: 'Horizon glow', default: 1.0, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'horizonGlow', type: 'range', label: 'Horizon glow', default: 0.6, min: 0.0, max: 2.0, step: 0.01 },
                 { key: 'sunsetShift', type: 'range', label: 'Sunset colour shift', default: 1.0, min: 0.0, max: 2.0, step: 0.01 },
-                { key: 'atmosphereSteps', type: 'range', label: 'Scattering samples', default: 12, min: 4, max: 24, step: 1 }
+                { key: 'atmosphereSteps', type: 'range', label: 'Scattering samples', default: 12, min: 4, max: 24, step: 1 },
+                { key: 'starBrightness', type: 'range', label: 'Stars', default: 1.0, min: 0.0, max: 3.0, step: 0.01 },
+                { key: 'milkyWay', type: 'range', label: 'Milky Way', default: 0.7, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'twinkle', type: 'range', label: 'Star twinkle', default: 0.6, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'moonBrightness', type: 'range', label: 'Moonlight', default: 1.0, min: 0.0, max: 3.0, step: 0.01 }
+            ]
+        },
+        {
+            id: 'terrain', title: 'Terrain & Forests', controls: [
+                { key: 'terrainEnabled', type: 'checkbox', label: 'Terrain & forest overhaul', default: true, structural: true },
+                { key: 'terrainLighting', type: 'range', label: 'Slope lighting / self-shadowing', default: 0.75, min: 0.0, max: 1.5, step: 0.01 },
+                { key: 'terrainDetail', type: 'range', label: 'Micro detail', default: 0.6, min: 0.0, max: 1.5, step: 0.01 },
+                { key: 'terrainMaterials', type: 'range', label: 'Material blending (rock/snow/sand)', default: 0.6, min: 0.0, max: 1.5, step: 0.01 },
+                { key: 'forestDetail', type: 'range', label: 'Forest canopy volume', default: 0.8, min: 0.0, max: 1.5, step: 0.01 },
+                { key: 'snowline', type: 'range', label: 'Snowline at 15 °C (m)', default: 3000, min: 500, max: 6000, step: 50 },
+                { key: 'terrainShadows', type: 'range', label: 'Contact shadows', default: 0.6, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'terrainShadowSteps', type: 'range', label: 'Shadow samples', default: 12, min: 4, max: 32, step: 1 },
+                { key: 'wetReflections', type: 'range', label: 'Wet surfaces & puddles', default: 0.8, min: 0.0, max: 1.5, step: 0.01 }
             ]
         },
         {
@@ -103,32 +131,36 @@
                 { key: 'manualOvercast', type: 'range', label: 'Overcast (manual)', default: 0.0, min: 0.0, max: 1.0, step: 0.01 },
                 { key: 'manualStorm', type: 'range', label: 'Storm (manual)', default: 0.0, min: 0.0, max: 1.0, step: 0.01 },
                 { key: 'manualPrecip', type: 'range', label: 'Precipitation (manual)', default: 0.0, min: 0.0, max: 1.0, step: 0.01 },
-                { key: 'manualFog', type: 'range', label: 'Fog (manual)', default: 0.0, min: 0.0, max: 1.0, step: 0.01 }
+                { key: 'manualFog', type: 'range', label: 'Fog (manual)', default: 0.0, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'humidityAuto', type: 'checkbox', label: 'Estimate humidity from weather', default: true },
+                { key: 'humidity', type: 'range', label: 'Humidity (manual)', default: 0.5, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'airTemperature', type: 'range', label: 'Sea-level temperature (°C, manual)', default: 15, min: -30, max: 45, step: 1 },
+                { key: 'surfaceWetness', type: 'range', label: 'Extra surface wetness', default: 0.0, min: 0.0, max: 1.0, step: 0.01 }
             ]
         },
         {
             id: 'godrays', title: 'God Rays', controls: [
                 { key: 'godraysEnabled', type: 'checkbox', label: 'God rays', default: true, structural: true },
-                { key: 'godraysStrength', type: 'range', label: 'Strength', default: 0.6, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'godraysStrength', type: 'range', label: 'Strength', default: 0.35, min: 0.0, max: 2.0, step: 0.01 },
                 { key: 'godraysSamples', type: 'range', label: 'Samples', default: 48, min: 8, max: 128, step: 1 },
                 { key: 'godraysLength', type: 'range', label: 'Length', default: 0.85, min: 0.1, max: 1.0, step: 0.01 },
                 { key: 'godraysDecay', type: 'range', label: 'Decay', default: 0.965, min: 0.9, max: 0.995, step: 0.001 },
-                { key: 'sunGlare', type: 'range', label: 'Sun glare', default: 0.6, min: 0.0, max: 2.0, step: 0.01 }
+                { key: 'sunGlare', type: 'range', label: 'Sun glare', default: 0.35, min: 0.0, max: 2.0, step: 0.01 }
             ]
         },
         {
             id: 'grade', title: 'Color Grading', controls: [
                 { key: 'gradeEnabled', type: 'checkbox', label: 'Color grading', default: true, structural: true },
-                { key: 'gradeMode', type: 'select', label: 'Look', default: 'msfs', options: [
+                { key: 'gradeMode', type: 'select', label: 'Look', default: 'realistic', options: [
                     ['realistic', 'Realistic'], ['msfs', 'MSFS'], ['dcs', 'DCS'], ['cinematic', 'Cinematic'], ['photographic', 'Photographic']
                 ] },
-                { key: 'gradeStrength', type: 'range', label: 'Strength', default: 0.8, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'gradeStrength', type: 'range', label: 'Strength', default: 0.35, min: 0.0, max: 1.0, step: 0.01 },
                 { key: 'gradeShadows', type: 'range', label: 'Shadows', default: 0.0, min: -1.0, max: 1.0, step: 0.01 },
                 { key: 'gradeMidtones', type: 'range', label: 'Midtones', default: 0.0, min: -1.0, max: 1.0, step: 0.01 },
                 { key: 'gradeHighlights', type: 'range', label: 'Highlights', default: 0.0, min: -1.0, max: 1.0, step: 0.01 },
-                { key: 'gradeWarmth', type: 'range', label: 'Warm highlights', default: 0.35, min: 0.0, max: 1.0, step: 0.01 },
-                { key: 'gradeCoolness', type: 'range', label: 'Cool shadows', default: 0.35, min: 0.0, max: 1.0, step: 0.01 },
-                { key: 'gradeVibrance', type: 'range', label: 'Vibrance', default: 0.15, min: -1.0, max: 1.0, step: 0.01 }
+                { key: 'gradeWarmth', type: 'range', label: 'Warm highlights', default: 0.08, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'gradeCoolness', type: 'range', label: 'Cool shadows', default: 0.1, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'gradeVibrance', type: 'range', label: 'Vibrance', default: 0.0, min: -1.0, max: 1.0, step: 0.01 }
             ]
         },
         {
@@ -143,12 +175,16 @@
         {
             id: 'reflections', title: 'Aircraft Reflections', controls: [
                 { key: 'reflectionsEnabled', type: 'checkbox', label: 'Aircraft reflections', default: true, structural: true },
-                { key: 'reflectionStrength', type: 'range', label: 'Environment reflection', default: 0.7, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'reflectionStrength', type: 'range', label: 'Environment reflection', default: 0.6, min: 0.0, max: 2.0, step: 0.01 },
                 { key: 'fresnelPower', type: 'range', label: 'Fresnel power', default: 5.0, min: 1.0, max: 8.0, step: 0.1 },
                 { key: 'roughness', type: 'range', label: 'Roughness', default: 0.35, min: 0.02, max: 1.0, step: 0.01 },
                 { key: 'metallic', type: 'range', label: 'Metal surfaces', default: 0.6, min: 0.0, max: 1.0, step: 0.01 },
                 { key: 'canopyBoost', type: 'range', label: 'Canopy reflections', default: 1.0, min: 0.0, max: 2.0, step: 0.01 },
-                { key: 'aircraftRadius', type: 'range', label: 'Aircraft size (m)', default: 22, min: 4, max: 90, step: 1 }
+                { key: 'aircraftRadius', type: 'range', label: 'Aircraft size (m)', default: 22, min: 4, max: 90, step: 1 },
+                { key: 'ssrEnabled', type: 'checkbox', label: 'Screen-space reflections (SSR)', default: true },
+                { key: 'ssrSteps', type: 'range', label: 'SSR samples', default: 24, min: 8, max: 48, step: 1 },
+                { key: 'pbrResponse', type: 'range', label: 'PBR light-direction response', default: 0.6, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'weathering', type: 'range', label: 'Weathered surfaces', default: 0.4, min: 0.0, max: 1.0, step: 0.01 }
             ]
         },
         {
@@ -160,22 +196,56 @@
                 { key: 'waterDeepStrength', type: 'range', label: 'Deep water coloring', default: 0.45, min: 0.0, max: 1.0, step: 0.01 },
                 { key: 'waterWaves', type: 'range', label: 'Wave strength', default: 1.0, min: 0.0, max: 3.0, step: 0.01 },
                 { key: 'waterFade', type: 'range', label: 'Distance fade (m)', default: 15000, min: 1000, max: 60000, step: 500 },
-                { key: 'waterTolerance', type: 'range', label: 'Sea level tolerance (m)', default: 60, min: 5, max: 200, step: 1 }
+                { key: 'waterTolerance', type: 'range', label: 'Sea level tolerance (m)', default: 60, min: 5, max: 200, step: 1 },
+                { key: 'waterSSR', type: 'checkbox', label: 'Water screen-space reflections', default: true }
+            ]
+        },
+        {
+            id: 'aero', title: 'Afterburner & Condensation', controls: [
+                { key: 'aeroEnabled', type: 'checkbox', label: 'Exhaust & condensation effects', default: true, structural: true },
+                { key: 'afterburnerIntensity', type: 'range', label: 'Afterburner glow', default: 1.0, min: 0.0, max: 3.0, step: 0.01 },
+                { key: 'plumeLength', type: 'range', label: 'Plume length', default: 1.0, min: 0.3, max: 2.5, step: 0.01 },
+                { key: 'plumeQuality', type: 'range', label: 'Plume samples', default: 24, min: 8, max: 40, step: 1 },
+                { key: 'nozzleRadius', type: 'range', label: 'Nozzle radius (m)', default: 0.5, min: 0.2, max: 1.5, step: 0.01 },
+                { key: 'heatHaze', type: 'range', label: 'Heat distortion', default: 1.0, min: 0.0, max: 3.0, step: 0.01 },
+                { key: 'vaporCone', type: 'range', label: 'Vapor cones (transonic)', default: 1.0, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'wingVapor', type: 'range', label: 'High-G wing vapor', default: 1.0, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'trailsEnabled', type: 'checkbox', label: 'Wingtip vortices & contrails', default: true },
+                { key: 'trailOpacity', type: 'range', label: 'Trail opacity', default: 0.7, min: 0.0, max: 2.0, step: 0.01 }
+            ]
+        },
+        {
+            id: 'cockpit', title: 'Cockpit & Rain', controls: [
+                { key: 'rainGlassEnabled', type: 'checkbox', label: 'Rain on canopy / windscreen', default: true, structural: true },
+                { key: 'rainGlassIntensity', type: 'range', label: 'Droplet amount', default: 1.0, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'cockpitLightEnabled', type: 'checkbox', label: 'Cockpit lighting', default: true, structural: true },
+                { key: 'cockpitSun', type: 'range', label: 'Sun penetration & soft shadows', default: 0.8, min: 0.0, max: 1.5, step: 0.01 },
+                { key: 'cockpitBounce', type: 'range', label: 'Ambient bounce', default: 0.6, min: 0.0, max: 1.5, step: 0.01 },
+                { key: 'cockpitShadowSteps', type: 'range', label: 'Cockpit shadow samples', default: 12, min: 4, max: 24, step: 1 },
+                { key: 'floodLight', type: 'range', label: 'Night flood / instrument light', default: 0.6, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'nightAdaptation', type: 'range', label: 'Night adaptation', default: 0.5, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'panelReflection', type: 'range', label: 'Panel reflections on glass', default: 0.6, min: 0.0, max: 2.0, step: 0.01 }
+            ]
+        },
+        {
+            id: 'night', title: 'Night Lighting', controls: [
+                { key: 'nightLightsEnabled', type: 'checkbox', label: 'City lights (NASA Black Marble)', default: true },
+                { key: 'cityLights', type: 'range', label: 'City light intensity', default: 1.0, min: 0.0, max: 2.0, step: 0.01 }
             ]
         },
         {
             id: 'lens', title: 'Lens Effects', controls: [
-                { key: 'lensFlareEnabled', type: 'checkbox', label: 'Lens flare', default: true, structural: true },
-                { key: 'flareIntensity', type: 'range', label: 'Flare intensity', default: 0.6, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'lensFlareEnabled', type: 'checkbox', label: 'Lens flare', default: false, structural: true },
+                { key: 'flareIntensity', type: 'range', label: 'Flare intensity', default: 0.3, min: 0.0, max: 2.0, step: 0.01 },
                 { key: 'flareGhosts', type: 'range', label: 'Ghosts', default: 1.0, min: 0.0, max: 2.0, step: 0.01 },
                 { key: 'flareHalo', type: 'range', label: 'Halo', default: 0.6, min: 0.0, max: 2.0, step: 0.01 },
                 { key: 'flareStarburst', type: 'range', label: 'Starburst', default: 0.7, min: 0.0, max: 2.0, step: 0.01 },
-                { key: 'streaksEnabled', type: 'checkbox', label: 'Bloom streaks', default: true, structural: true },
+                { key: 'streaksEnabled', type: 'checkbox', label: 'Bloom streaks', default: false, structural: true },
                 { key: 'streakIntensity', type: 'range', label: 'Streak intensity', default: 0.3, min: 0.0, max: 2.0, step: 0.01 },
-                { key: 'chromaticEnabled', type: 'checkbox', label: 'Chromatic aberration', default: true, structural: true },
-                { key: 'chromatic', type: 'range', label: 'Aberration amount', default: 0.3, min: 0.0, max: 2.0, step: 0.01 },
-                { key: 'vignetteEnabled', type: 'checkbox', label: 'Vignette', default: true, structural: true },
-                { key: 'vignette', type: 'range', label: 'Vignette amount', default: 0.35, min: 0.0, max: 1.0, step: 0.01 },
+                { key: 'chromaticEnabled', type: 'checkbox', label: 'Chromatic aberration', default: false, structural: true },
+                { key: 'chromatic', type: 'range', label: 'Aberration amount', default: 0.15, min: 0.0, max: 2.0, step: 0.01 },
+                { key: 'vignetteEnabled', type: 'checkbox', label: 'Vignette', default: false, structural: true },
+                { key: 'vignette', type: 'range', label: 'Vignette amount', default: 0.15, min: 0.0, max: 1.0, step: 0.01 },
                 { key: 'vignetteRadius', type: 'range', label: 'Vignette radius', default: 0.95, min: 0.3, max: 1.4, step: 0.01 },
                 { key: 'vignetteSoftness', type: 'range', label: 'Vignette softness', default: 0.6, min: 0.05, max: 1.2, step: 0.01 }
             ]

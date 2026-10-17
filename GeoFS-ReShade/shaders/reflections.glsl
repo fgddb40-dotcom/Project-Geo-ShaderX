@@ -31,6 +31,8 @@ uniform float u_canopyBoost;
 uniform float u_rayleigh;
 uniform float u_mie;
 uniform vec4 u_weather;
+uniform vec4 u_pbr;               // x SSR on/off, y SSR steps, z light-direction response, w weathering
+uniform vec4 u_moisture;          // x humidity, y wetness, z temperature (C), w unused
 
 vec3 environment(vec3 dir, vec3 sunDir, float camHKm, float mie, float day)
 {
@@ -98,12 +100,15 @@ void main()
 
     // Glass heuristic: dark and desaturated surfaces get a smoother, stronger mirror.
     float glass = (1.0 - smoothstep(0.08, 0.28, l)) * (1.0 - smoothstep(0.05, 0.2, sat)) * u_canopyBoost;
-    float rough = clamp(mix(u_roughness, u_roughness * 0.2, glass), 0.02, 1.0);
+    // Weathering: darker, dirtier paint is rougher; a wet skin is much smoother.
+    float grime = (1.0 - smoothstep(0.15, 0.6, l)) * u_pbr.w;
+    float rough = clamp(mix(u_roughness, u_roughness * 0.2, glass) + grime * 0.25, 0.02, 1.0);
+    rough = mix(rough, rough * 0.35, u_moisture.y * (1.0 - glass));
 
     float NdotV = clamp(dot(N, V), 0.0, 1.0);
     float F0 = mix(0.04, 0.55, u_metallic);
     F0 = mix(F0, 0.06, glass);
-    float fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, u_fresnelPower);
+    float fresnel = F0 + (1.0 - F0) * pow(max(1.0 - NdotV, 0.0), u_fresnelPower);
     fresnel *= mix(1.0, 0.45, rough);
 
     // Roughness blur: average a small cone of reflection directions.
@@ -118,6 +123,15 @@ void main()
     env += environment(normalize(R - t2 * cone), sunDir, camHKm, mie, day);
     env /= 6.0;
     env = mix(env, vec3(gfsr_luma(env)), overcast * 0.6);
+
+    // SSR always takes priority over the analytic environment probe.
+    if (u_pbr.x > 0.5 && rough < 0.6) {
+        vec3 rEC = normalize(reflect(-vEC, nEC));
+        float jitter = gfsr_ign(gl_FragCoord.xy);
+        vec4 ssr = gfsr_ssr(colorTexture, depthTexture, pEC + nEC * 0.05, rEC, max(u_aircraftRadius * 6.0, 40.0), u_pbr.y, jitter);
+        float conf = ssr.a * (1.0 - smoothstep(0.2, 0.6, rough));
+        env = mix(env, gfsr_toLinear(ssr.rgb), conf);
+    }
 
     // GGX sun specular.
     vec3 H = normalize(V + sunDir);
@@ -134,6 +148,13 @@ void main()
     vec3 reflTint = mix(vec3(1.0), base / max(gfsr_luma(base), 0.05), u_metallic * 0.5 * (1.0 - glass));
     vec3 refl = env * reflTint;
     float k = u_strength * mask;
+
+    // Directional response: the stock shading is almost flat, so re-shape it
+    // towards Lambert relative to a flat-lit reference (keeps average exposure).
+    float wrapL = clamp((dot(N, sunDir) + 0.25) / 1.25, 0.0, 1.0);
+    float relight = mix(0.62, 1.22, wrapL) * mix(1.0, 0.92, overcast);
+    base *= mix(1.0, mix(1.0, relight, day), u_pbr.z * mask * (1.0 - glass * 0.7));
+
     vec3 outLin = mix(base, refl, clamp(fresnel * k, 0.0, 1.0));
     outLin += spec * k * (1.0 + glass);
     outLin = outLin / (1.0 + max(outLin - 1.0, 0.0));

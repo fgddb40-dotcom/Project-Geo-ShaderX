@@ -17,7 +17,7 @@ const MAIN = path.join(ROOT, 'main.user.js');
 const INDENT = '    ';
 
 function read(rel) {
-    return fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
+    return fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
 }
 
 function listFiles(dir, ext) {

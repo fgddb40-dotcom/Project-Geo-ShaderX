@@ -1,10 +1,18 @@
 // GeoFS-ReShade : clouds.glsl
-// Fake volumetric clouds: fbm()/noise() density field + raymarch approximation.
+// Raymarched volumetric clouds (v2).
 //
-//   Layers   : volumetric layer (cumulus or storm) + high cirrus sheet
-//   Lighting : Beer-Lambert + multi-scattering octaves, dual Henyey-Greenstein
-//              phase (silver lining), sky ambient, sun colour from atmosphere
-//   Shadows  : sun-projected density lookup darkens terrain (clouds_apply)
+//   Density  : Perlin-Worley base shape, 2D weather map (cloud fields),
+//              height profiles (cumulus / stratus / storm with anvil),
+//              Worley erosion (billowy tops, wispy bases), wind shear.
+//   Lighting : Beer-Lambert + Beer-powder, dual-lobe Henyey-Greenstein phase
+//              (forward scattering / silver lining), multiple-scattering
+//              octaves, height-graded sky ambient, ground bounce,
+//              moonlight at night, humidity-softened lighting.
+//   Marching : interleaved-gradient (blue-noise-like) jitter, adaptive steps
+//              with empty-space skipping, short steps inside clouds so the
+//              camera can fly through cloud interiors, detail LOD by distance.
+//   Layers   : volumetric layer + high cirrus sheet, aerial perspective.
+//   Shadows  : sun-projected density darkens terrain (clouds_apply).
 //
 // Text above the first @program marker is shared by every program in this file.
 // Requires common.glsl (prepended by the loader).
@@ -21,18 +29,32 @@ uniform vec4 u_cloudLayer;    // x base (m), y thickness (m), z coverage 0..1, w
 uniform vec4 u_cloudParams;   // x type (0 cirrus, 1 cumulus, 2 storm), y metres per noise cell, z brightness, w cirrus layer on/off
 uniform vec4 u_cirrus;        // x altitude (m), y coverage 0..1, z opacity, w unused
 uniform vec4 u_weather;       // x overcast, y storm, z precipitation, w fog
+uniform vec4 u_moisture;      // x humidity, y wetness, z air temperature (C), w moon brightness
 
 const float CLOUD_PERIOD = 64.0;
 
-float cloudHeightProfile(float hf, float type)
+float cloudHeightProfile(float hf, float type, float cov)
 {
-    float cumulus = smoothstep(0.0, 0.12, hf) * (1.0 - smoothstep(0.45, 1.0, hf));
-    float stormy = smoothstep(0.0, 0.05, hf) * (1.0 - smoothstep(0.82, 1.0, hf));
-    return type < 1.5 ? cumulus : stormy;
+    // Flat condensation base, rounded cauliflower top.
+    float cumulus = smoothstep(0.0, 0.07, hf) * (1.0 - smoothstep(0.3, 1.0, hf));
+    // Overcast skies flatten into stratiform decks.
+    float strat = smoothstep(0.0, 0.12, hf) * (1.0 - smoothstep(0.55, 1.0, hf));
+    // Cumulonimbus: tall column with an anvil spreading under the tropopause.
+    float stormy = smoothstep(0.0, 0.03, hf) * (1.0 - smoothstep(0.92, 1.0, hf));
+    stormy = max(stormy * 0.85, smoothstep(0.72, 0.85, hf) * (1.0 - smoothstep(0.93, 1.0, hf)));
+    float p = mix(cumulus, strat, smoothstep(0.75, 0.95, cov));
+    return type > 1.5 ? stormy : p;
+}
+
+// Large-scale weather map: clusters clouds into fields with clear gaps.
+float weatherMap(vec2 q)
+{
+    return gfsr_fbm2(q * 0.25, vec2(CLOUD_PERIOD * 0.25), 3);
 }
 
 // pos.xy = horizontal ENU metres relative to the camera, pos.z = altitude (m).
-float cloudDensity(vec3 pos, float detailed)
+// lod: 0 = full detail (erosion), 1 = base shape only (light rays, shadows).
+float cloudDensity(vec3 pos, float lod)
 {
     float base = u_cloudLayer.x;
     float thick = max(u_cloudLayer.y, 50.0);
@@ -42,31 +64,59 @@ float cloudDensity(vec3 pos, float detailed)
     }
     float type = u_cloudParams.x;
     float storm = max(u_weather.y, type > 1.5 ? 1.0 : 0.0);
-    float cov = clamp(u_cloudLayer.z + storm * 0.25, 0.0, 1.0);
+    float cov = clamp(u_cloudLayer.z + storm * 0.2, 0.0, 1.0);
 
-    vec3 q = vec3(pos.xy + u_cloudOffset, pos.z) / u_cloudParams.y;
-    q.z += u_time * 0.0015;
-    float shapeN = smoothstep(0.25, 0.85, gfsr_fbm3(q, CLOUD_PERIOD, 4));
-    float d = shapeN * cloudHeightProfile(hf, type);
-    d = (d - (1.0 - cov)) / max(cov, 0.05);
+    vec2 q2 = (pos.xy + u_cloudOffset) / u_cloudParams.y;
+    float wm = weatherMap(q2);
+    float localCov = clamp(cov + (wm - 0.5) * 0.7 * (1.0 - cov * 0.6), 0.0, 1.0);
+    if (localCov < 0.02) {
+        return 0.0;
+    }
+
+    // Wind shear leans the towers downwind with height.
+    vec3 q = vec3(q2 + vec2(0.35, 0.12) * hf, pos.z / u_cloudParams.y + u_time * 0.0012);
+    float perlin = gfsr_fbm3(q, CLOUD_PERIOD, 3);
+    float profile = cloudHeightProfile(hf, type, cov);
+    // Conservative early-out: even a maximal Worley value cannot form cloud here.
+    if (smoothstep(0.25, 0.8, perlin * 0.6 + 0.47) * profile <= 1.0 - localCov) {
+        return 0.0;
+    }
+    float shape;
+    if (lod < 0.5) {
+        // Perlin-Worley: billows grow around Worley cell centres.
+        float w = 1.0 - gfsr_worley3(q * 2.0, CLOUD_PERIOD * 2.0);
+        shape = smoothstep(0.25, 0.8, perlin * 0.6 + w * 0.55 - 0.08);
+    } else {
+        // Same mean as the detailed version so the LOD transition is invisible.
+        shape = smoothstep(0.25, 0.8, perlin * 0.6 + 0.195);
+    }
+
+    float d = gfsr_remap(shape * profile, 1.0 - localCov, 1.0, 0.0, 1.0);
     if (d <= 0.0) {
         return 0.0;
     }
-    if (detailed > 0.5) {
-        float detail = gfsr_fbm3(q * 6.0 + vec3(0.0, 0.0, u_time * 0.01), CLOUD_PERIOD * 6.0, 2);
-        d -= detail * 0.4 * (1.0 - clamp(d, 0.0, 1.0));
+
+    if (lod < 0.5) {
+        // Erosion: billowy (inverted Worley) at the top, wispy (fbm) at the base.
+        vec3 qd = q * 8.0 + vec3(0.0, 0.0, u_time * 0.008);
+        float billow = 1.0 - gfsr_worley3(qd, CLOUD_PERIOD * 8.0);
+        float wisp = gfsr_fbm3(qd * 2.0, CLOUD_PERIOD * 16.0, 2);
+        float detail = mix(wisp, billow, clamp(hf * 1.6, 0.0, 1.0));
+        float erode = 0.42 * (1.0 - lod) * mix(1.0, 0.6, storm);
+        d = gfsr_remap(d, detail * erode, 1.0, 0.0, 1.0);
     }
-    return clamp(d, 0.0, 1.0) * u_cloudLayer.w * (1.0 + storm * 0.6);
+    return clamp(d, 0.0, 1.0) * u_cloudLayer.w * (1.0 + storm * 0.8);
 }
 
 float cirrusDensity(vec2 xy)
 {
-    // Stretched along the east axis; periods stay integer so the CPU wrap is seamless.
+    // Fibrous ice sheet stretched along the wind; integer periods keep the CPU wrap seamless.
     vec2 q = (xy + u_cloudOffset) / (u_cloudParams.y * vec2(4.0, 1.0));
-    vec2 warp = vec2(gfsr_fbm2(q * 2.0, vec2(32.0, 128.0), 2), 0.0) * 0.6;
+    vec2 warp = vec2(gfsr_fbm2(q * 2.0, vec2(32.0, 128.0), 3), gfsr_fbm2(q * 2.0 + 5.0, vec2(32.0, 128.0), 2) * 0.3) * 0.7;
     float n = gfsr_fbm2(q + warp, vec2(16.0, 64.0), 5);
+    float streak = gfsr_fbm2(vec2(q.x * 0.5, q.y * 6.0) + warp * 2.0, vec2(8.0, 384.0), 3);
     float cov = clamp(u_cirrus.y, 0.0, 1.0);
-    return smoothstep(1.0 - cov, 1.0 - cov + 0.35, n);
+    return smoothstep(1.0 - cov, 1.0 - cov + 0.35, n * 0.75 + streak * 0.25);
 }
 
 // @program clouds_generate
@@ -84,31 +134,40 @@ void main()
 
     vec3 rd = normalize(u_eyeToEnu * gfsr_viewRayEC(uv));
     vec3 sunDir = normalize(u_eyeToEnu * czm_sunDirectionEC);
+    vec3 moonDir = normalize(u_eyeToEnu * czm_moonDirectionEC);
     float camH = u_camHeight;
     float camHKm = max(camH, 1.0) * 0.001;
-    float nu = dot(rd, sunDir);
     float type = u_cloudParams.x;
     float storm = max(u_weather.y, type > 1.5 ? 1.0 : 0.0);
+    float humidity = u_moisture.x;
 
     float base = u_cloudLayer.x;
     float thick = max(u_cloudLayer.y, 50.0);
     float top = base + thick;
     float midKm = (base + 0.5 * thick) * 0.001;
 
-    // Lighting environment from the atmosphere model.
-    float day = smoothstep(-0.10, 0.05, sunDir.z);
-    vec3 sunCol = gfsr_sunTransmittance(midKm, sunDir.z, 1.0, 1.0, 1.0) * 3.2 * day;
+    // Light source: the sun, or the moon once the sun is well below the horizon.
+    float day = smoothstep(-0.10, 0.03, sunDir.z);
+    float moonPhase = 0.5 * (1.0 - dot(sunDir, moonDir));
+    vec3 lightDir = sunDir.z > -0.08 ? sunDir : moonDir;
+    vec3 sunCol = gfsr_sunTransmittance(midKm, sunDir.z, 1.0, 1.0, 1.0) * 3.0 * day;
+    vec3 moonCol = vec3(0.55, 0.62, 0.75) * 0.05 * pow(max(moonPhase, 0.0), 1.5) * smoothstep(-0.05, 0.1, moonDir.z) * u_moisture.w;
+    vec3 lightCol = sunDir.z > -0.08 ? sunCol : moonCol;
+    float nu = dot(rd, lightDir);
+
     vec3 ambL;
     vec3 ambT;
     gfsr_scatter(midKm, vec3(0.0, 0.0, 1.0), sunDir, 1.0e9, 1.0, 1.0, 1.0, 6.0, ambL, ambT);
-    vec3 ambient = (1.0 - exp(-ambL)) * 1.4 + vec3(0.010, 0.012, 0.018);
-    // Overcast skies still light cloud bases with diffuse skylight.
-    ambient = max(ambient, vec3(0.30, 0.33, 0.38) * day);
-    float darken = 1.0 - 0.55 * storm - 0.25 * u_weather.x;
-    sunCol *= darken;
-    ambient *= mix(1.0, 0.55, storm);
-    // Sunlight bounced off the ground onto cloud bases.
-    vec3 bounce = sunCol * max(sunDir.z, 0.0) * 0.12;
+    vec3 ambTop = (1.0 - exp(-ambL)) * 1.5 + vec3(0.004, 0.005, 0.008) + moonCol * 0.6;
+    // Overcast skies still light the cloud with diffuse skylight.
+    ambTop = max(ambTop, vec3(0.30, 0.33, 0.38) * day);
+    float darken = 1.0 - 0.6 * storm - 0.25 * u_weather.x;
+    lightCol *= darken;
+    ambTop *= mix(1.0, 0.5, storm);
+    // Sunlight reflected by the ground onto cloud bases (greenish-brown albedo).
+    vec3 bounce = sunCol * max(sunDir.z, 0.0) * vec3(0.10, 0.11, 0.09) * darken;
+    // Humid air softens lighting: more diffuse, less directional contrast.
+    float soft = 1.0 + humidity * 0.6;
 
     float maxD = u_maxDistance;
     float jitter = gfsr_ign(gl_FragCoord.xy);
@@ -123,6 +182,7 @@ void main()
         vec2 tg = gfsr_shell(camHKm, rd.z, 0.0);
         float t0 = -1.0;
         float t1 = -1.0;
+        bool inside = false;
         if (camH < base) {
             if (tb.y > 0.0) {
                 t0 = tb.y;
@@ -134,6 +194,7 @@ void main()
                 t1 = tb.x > 0.0 ? tb.x : tt.y;
             }
         } else {
+            inside = true;
             t0 = 0.0;
             t1 = rd.z > 0.0 ? tt.y : (tb.x > 0.0 ? tb.x : tt.y);
         }
@@ -147,61 +208,82 @@ void main()
 
         if (t0 >= 0.0 && t1 > t0) {
             float stepsF = max(u_cloudSteps, 4.0);
-            float dt = (t1 - t0) / stepsF;
+            float dtBase = (t1 - t0) / stepsF;
+            // Inside a cloud start with short steps so the interior has detail.
+            float dt = inside ? clamp(dtBase * 0.15, 15.0, dtBase) : dtBase;
             float t = t0 + dt * jitter;
-            float lightStep = thick * 0.12;
+            float detailDist = maxD * 0.35;
+            float lightStep = thick * 0.06;
+            float msGain = 0.0;
 
-            for (int i = 0; i < 128; i++) {
-                if (float(i) >= stepsF || volT < 0.02) {
+            for (int i = 0; i < 160; i++) {
+                if (t > t1 || volT < 0.01 || float(i) >= stepsF * 1.6) {
                     break;
                 }
                 vec3 p = rd * t;
                 float alt = gfsr_altAlong(camHKm, rd.z, t * 0.001) * 1000.0;
                 vec3 pos = vec3(p.xy, alt);
-                float d = cloudDensity(pos, 1.0);
+                float lod = smoothstep(detailDist * 0.6, detailDist, t);
+                float d = cloudDensity(pos, lod);
                 if (d > 0.002) {
                     if (volHit > 1.0e8) {
                         volHit = t;
                     }
-                    // Light march towards the sun.
+                    // Cone-shaped light march towards the light source.
                     float od = 0.0;
                     float ls = lightStep;
                     vec3 lp = pos;
-                    for (int j = 0; j < 4; j++) {
-                        lp += sunDir * ls;
-                        od += cloudDensity(lp, 0.0) * ls;
-                        ls *= 1.7;
+                    for (int j = 0; j < 5; j++) {
+                        lp += lightDir * ls;
+                        od += cloudDensity(lp, 1.0) * ls;
+                        ls *= 1.8;
                     }
-                    float lightOD = od * 0.003;
+                    float lightOD = od * 0.0035 / soft;
 
-                    // Multi-scattering octaves (Wrenninge) -> soft bright interiors
-                    // and strong forward-scattered silver lining near the sun.
+                    // Multiple-scattering octaves (Wrenninge): each octave
+                    // attenuates less and scatters more isotropically.
                     float light = 0.0;
                     float a = 1.0;
                     float b = 1.0;
                     float c = 1.0;
-                    for (int k = 0; k < 3; k++) {
-                        float ph = mix(gfsr_phaseHG(nu, 0.6 * c), gfsr_phaseHG(nu, -0.25 * c), 0.4) * 4.0 * GFSR_PI;
-                        ph = min(ph, 5.0);
+                    for (int k = 0; k < 4; k++) {
+                        float ph = mix(gfsr_phaseHG(nu, 0.8 * c), gfsr_phaseHG(nu, -0.3 * c), 0.35)
+                                 + 0.15 * gfsr_phaseHG(nu, 0.95 * c);
+                        ph = min(ph * 4.0 * GFSR_PI, 8.0);
                         light += b * exp(-lightOD * a) * ph;
-                        a *= 0.3;
-                        b *= 0.6;
+                        a *= 0.25;
+                        b *= 0.55;
                         c *= 0.5;
                     }
-                    // Powder term darkens the sun-facing edges of thick cores.
-                    float powder = 1.0 - exp(-d * dt * 0.016);
-                    light *= mix(1.0, powder * 2.0, 0.35 * (1.0 - smoothstep(0.6, 1.0, nu)));
+                    // Beer-powder: in-scattering builds up inside the volume, so
+                    // sun-facing edges of dense cores look darker ("powder effect");
+                    // the effect fades when looking towards the sun.
+                    float powder = 1.0 - exp(-od * 0.007 - d * 1.5);
+                    light *= mix(1.0, powder, 0.65 * (1.0 - smoothstep(0.2, 0.9, nu)));
 
                     float hf = clamp((alt - base) / thick, 0.0, 1.0);
-                    vec3 S = sunCol * light + ambient * mix(0.6, 1.0, hf) + bounce * (1.0 - hf);
+                    // Ambient: brighter at the top (sky dome), darker at the
+                    // base, plus a little occlusion from the local density.
+                    float ambOcc = mix(0.35, 1.0, pow(hf, 0.6)) * (1.0 - 0.3 * d);
+                    vec3 S = lightCol * light + ambTop * ambOcc * soft * 0.85 + bounce * (1.0 - hf);
                     S *= u_cloudParams.z;
 
-                    float sigma = 0.008 * d;
+                    float sigma = 0.0075 * d;
                     float stepT = exp(-sigma * dt);
                     volL += volT * (1.0 - stepT) * S;
                     volT *= stepT;
+                    msGain += d;
+                    if (inside) {
+                        dt = min(dt * 1.04, dtBase);
+                    }
+                    t += dt;
+                } else {
+                    // Empty-space skipping: larger strides through clear air.
+                    t += inside ? dt * 1.5 : dt * 2.0;
+                    if (inside) {
+                        dt = min(dt * 1.1, dtBase);
+                    }
                 }
-                t += dt;
             }
         }
     }
@@ -219,9 +301,11 @@ void main()
             float d = cirrusDensity(p.xy);
             float fade = 1.0 - smoothstep(maxD * 1.5, maxD * 3.0, tci);
             cirA = d * u_cirrus.z * fade * (type < 0.5 ? 1.0 : 0.75);
-            float ph = gfsr_phaseHG(nu, 0.6) * 4.0 * GFSR_PI;
-            vec3 cirSun = gfsr_sunTransmittance(hc * 0.001, sunDir.z, 1.0, 1.0, 1.0) * 3.2 * day * darken;
-            cirL = (cirSun * (0.55 + 0.45 * ph) + ambient * 1.2) * u_cloudParams.z;
+            // Ice crystals: strong forward scattering, faint backscatter.
+            float ph = (0.7 * gfsr_phaseHG(nu, 0.75) + 0.3 * gfsr_phaseHG(nu, -0.2)) * 4.0 * GFSR_PI;
+            vec3 cirSun = gfsr_sunTransmittance(hc * 0.001, sunDir.z, 1.0, 1.0, 1.0) * 3.0 * day * darken;
+            vec3 cirLight = sunDir.z > -0.08 ? cirSun : moonCol;
+            cirL = (cirLight * (0.45 + 0.55 * min(ph, 6.0)) + ambTop * 1.1) * u_cloudParams.z;
             cirHit = tci;
         }
     }
@@ -239,12 +323,16 @@ void main()
         colL = (volC * volA + cirL * cirA * (1.0 - volA)) / max(alpha, 1e-4);
     }
 
-    // Distance fade into the horizon haze.
+    // Aerial perspective between the camera and the cloud.
     float hitDist = min(volHit, cirHit);
-    float haze = 1.0 - exp(-hitDist / (maxD * 0.45));
-    vec3 hazeCol = ambient * 1.3 + sunCol * 0.08;
-    colL = mix(colL, hazeCol, haze * 0.75);
-    alpha *= 1.0 - smoothstep(maxD * 0.4, maxD, volHit) * step(volHit, cirHit);
+    if (hitDist < 1.0e8) {
+        vec3 Lap;
+        vec3 Tap;
+        gfsr_scatter(camHKm, rd, sunDir, hitDist * 0.001, 1.0, 1.0 + humidity, 1.0, 4.0, Lap, Tap);
+        colL = colL * Tap + Lap * (1.0 + humidity * 0.5);
+        float far = smoothstep(maxD * 0.4, maxD, hitDist);
+        alpha *= 1.0 - far * step(volHit, cirHit);
+    }
 
     vec3 display = gfsr_toGamma(1.0 - exp(-colL));
     gl_FragColor = vec4(display, clamp(alpha, 0.0, 1.0));
@@ -307,14 +395,19 @@ void main()
             vec3 p = u_eyeToEnu * pEC;
             float alt = u_camHeight + p.z + dot(p.xy, p.xy) / (2.0 * GFSR_R_M);
             vec3 sunDir = normalize(u_eyeToEnu * czm_sunDirectionEC);
-            float shadowAlt = u_cloudLayer.x + 0.35 * u_cloudLayer.y;
-            if (sunDir.z > 0.03 && alt < shadowAlt) {
-                float tt = (shadowAlt - alt) / sunDir.z;
-                vec3 sp = vec3(p.xy + sunDir.xy * tt, shadowAlt);
-                float d = cloudDensity(sp, 0.0);
+            if (sunDir.z > 0.03 && alt < u_cloudLayer.x + u_cloudLayer.y * 0.5) {
+                // Two samples through the layer give soft, volume-aware shadows.
+                float od = 0.0;
+                for (int k = 0; k < 2; k++) {
+                    float sh = u_cloudLayer.x + u_cloudLayer.y * (0.15 + 0.3 * float(k));
+                    if (alt < sh) {
+                        float tt = (sh - alt) / sunDir.z;
+                        od += cloudDensity(vec3(p.xy + sunDir.xy * tt, sh), 1.0);
+                    }
+                }
                 float sunFade = smoothstep(0.03, 0.2, sunDir.z);
                 float distFade = 1.0 - smoothstep(60000.0, 120000.0, dist);
-                float shade = u_shadowStrength * smoothstep(0.0, 0.35, d) * sunFade * distFade;
+                float shade = u_shadowStrength * (1.0 - exp(-od * 2.5)) * sunFade * distFade;
                 col *= 1.0 - shade;
             }
         }

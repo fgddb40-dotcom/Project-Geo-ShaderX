@@ -356,3 +356,169 @@ void gfsr_scatter(float camHKm, vec3 rd, vec3 sunDir, float tMaxKm,
                                + sumM * GFSR_BETA_M * mie * gfsr_phaseMie(nu, 0.76));
     transmittance = exp(-gfsr_extinction(odView, rayleigh, mie, ozone));
 }
+
+// ---------------------------------------------------------------------------
+// Realism helpers (v2): cellular noise, projection, SSR, blackbody, sky approx
+// ---------------------------------------------------------------------------
+
+// Tileable 3D Worley (cellular) noise. Returns distance to the nearest
+// feature point in [0, ~1]; invert it for billowy cloud / canopy shapes.
+float gfsr_worley3(vec3 x, float period)
+{
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    float best = 1.0;
+    for (int z = -1; z <= 1; z++) {
+        for (int y = -1; y <= 1; y++) {
+            for (int xx = -1; xx <= 1; xx++) {
+                vec3 o = vec3(float(xx), float(y), float(z));
+                vec3 cell = mod(i + o, period);
+                vec3 jit = vec3(gfsr_hash13(cell), gfsr_hash13(cell + 17.31), gfsr_hash13(cell + 41.07));
+                vec3 d = o + jit - f;
+                best = min(best, dot(d, d));
+            }
+        }
+    }
+    return sqrt(best);
+}
+
+// Tileable 2D Worley noise. x = distance to nearest point, y = cell id hash,
+// zw = offset from the pixel to that feature point (in cells).
+vec4 gfsr_worley2(vec2 x, vec2 period)
+{
+    vec2 i = floor(x);
+    vec2 f = fract(x);
+    float best = 8.0;
+    float id = 0.0;
+    vec2 off = vec2(0.0);
+    for (int y = -1; y <= 1; y++) {
+        for (int xx = -1; xx <= 1; xx++) {
+            vec2 o = vec2(float(xx), float(y));
+            vec2 cell = mod(i + o, period);
+            vec2 jit = vec2(gfsr_hash12(cell), gfsr_hash12(cell + 23.17)) * 0.8 + 0.1;
+            vec2 d = o + jit - f;
+            float dd = dot(d, d);
+            if (dd < best) {
+                best = dd;
+                id = gfsr_hash12(cell + 7.7);
+                off = d;
+            }
+        }
+    }
+    return vec4(sqrt(best), id, off);
+}
+
+float gfsr_remap(float v, float lo, float hi, float nlo, float nhi)
+{
+    return nlo + (v - lo) / max(hi - lo, 1e-5) * (nhi - nlo);
+}
+
+// Eye-space point -> screen uv. z < 0 in the result means behind the camera.
+vec3 gfsr_projectEC(vec3 pEC)
+{
+    vec4 clip = czm_projection * vec4(pEC, 1.0);
+    if (clip.w <= 1e-5) {
+        return vec3(-1.0, -1.0, -1.0);
+    }
+    return vec3(clip.xy / clip.w * 0.5 + 0.5, 1.0);
+}
+
+// Screen-space reflection march (eye space). Returns rgb = reflected colour,
+// a = confidence (0 = miss, fall back to the IBL / analytic environment).
+vec4 gfsr_ssr(sampler2D colorTex, sampler2D depthTex, vec3 pEC, vec3 rEC,
+              float maxDist, float steps, float jitter)
+{
+    float n = max(steps, 4.0);
+    float prevT = 0.0;
+    for (int i = 0; i < 48; i++) {
+        if (float(i) >= n) {
+            break;
+        }
+        float f = (float(i) + jitter) / n;
+        float t = maxDist * f * f + 0.25;
+        vec3 p = pEC + rEC * t;
+        if (p.z > -0.05) {
+            break;
+        }
+        vec3 s = gfsr_projectEC(p);
+        if (s.z < 0.0 || s.x < 0.0 || s.x > 1.0 || s.y < 0.0 || s.y > 1.0) {
+            break;
+        }
+        float raw = texture2D(depthTex, s.xy).r;
+        if (!gfsr_isSkyDepth(raw)) {
+            vec3 q = gfsr_eyePosition(depthTex, s.xy);
+            float diff = -p.z - (-q.z);
+            float thick = max(0.6, (t - prevT) * 1.5 + -q.z * 0.01);
+            if (diff > 0.0 && diff < thick) {
+                // Binary refinement between the previous and current sample.
+                float a = prevT;
+                float b = t;
+                vec2 hitUv = s.xy;
+                for (int k = 0; k < 5; k++) {
+                    float m = 0.5 * (a + b);
+                    vec3 pm = pEC + rEC * m;
+                    vec3 sm = gfsr_projectEC(pm);
+                    vec3 qm = gfsr_eyePosition(depthTex, sm.xy);
+                    if (-pm.z > -qm.z) {
+                        b = m;
+                        hitUv = sm.xy;
+                    } else {
+                        a = m;
+                    }
+                }
+                vec2 e = min(hitUv, 1.0 - hitUv);
+                float edge = smoothstep(0.0, 0.08, min(e.x, e.y));
+                float conf = edge * (1.0 - f * f);
+                return vec4(texture2D(colorTex, hitUv).rgb, conf);
+            }
+        }
+        prevT = t;
+    }
+    return vec4(0.0);
+}
+
+// Approximate normalised blackbody colour (linear sRGB) for 1000..12000 K.
+vec3 gfsr_blackbody(float kelvin)
+{
+    float t = clamp(kelvin, 1000.0, 12000.0) / 100.0;
+    float r = t <= 66.0 ? 1.0 : clamp(1.292936 * pow(t - 60.0, -0.1332047), 0.0, 1.0);
+    float g = t <= 66.0 ? clamp(0.3900816 * log(t) - 0.6318414, 0.0, 1.0)
+                        : clamp(1.1298909 * pow(t - 60.0, -0.0755148), 0.0, 1.0);
+    float b = t >= 66.0 ? 1.0 : (t <= 19.0 ? 0.0 : clamp(0.5432068 * log(t - 10.0) - 1.1962541, 0.0, 1.0));
+    return gfsr_toLinear(vec3(r, g, b));
+}
+
+// Cheap closed-form sky radiance (linear, display-scaled) used where the full
+// single-scatter integral would be too expensive (IBL fallback, wet surfaces).
+vec3 gfsr_skyApprox(vec3 dir, vec3 sunDir, float camHKm, float overcast)
+{
+    float day = smoothstep(-0.12, 0.05, sunDir.z);
+    vec3 sunT = gfsr_sunTransmittance(camHKm, max(sunDir.z, 0.0), 1.0, 1.0, 1.0);
+    float up = max(dir.z, 0.0);
+    float horizon = exp(-up * 6.0);
+    vec3 zenith = vec3(0.10, 0.22, 0.55) * exp(-camHKm * 0.06);
+    vec3 hor = vec3(0.55, 0.65, 0.78);
+    vec3 sky = mix(zenith, hor, horizon) * (0.35 + 0.65 * sunT);
+    float nu = max(dot(dir, sunDir), 0.0);
+    sky += sunT * pow(nu, 12.0) * 0.6;
+    if (dir.z < 0.0) {
+        sky = mix(hor * 0.6, vec3(0.08, 0.085, 0.07), smoothstep(0.0, 0.25, -dir.z)) * (0.3 + 0.7 * sunT);
+    }
+    sky = mix(sky, vec3(gfsr_luma(sky)) * vec3(0.95, 0.97, 1.0), overcast * 0.8);
+    return sky * mix(0.015, 1.0, day);
+}
+
+// Smooth mask (0..1) of pixels belonging to the user's aircraft.
+// acDist = camera -> aircraft origin distance, r = bounding radius.
+float gfsr_aircraftMask(float dist, float acDist, float r)
+{
+    if (acDist <= 0.0) {
+        return 0.0;
+    }
+    float cockpit = 1.0 - smoothstep(r * 0.6, r, acDist);
+    float edge = r * 0.15;
+    float inside = smoothstep(acDist - r - edge, acDist - r + edge, dist)
+                 * (1.0 - smoothstep(acDist + r - edge, acDist + r + edge, dist));
+    float cockpitMask = 1.0 - smoothstep(r * 0.9, r * 1.2, dist);
+    return mix(inside, cockpitMask, cockpit);
+}

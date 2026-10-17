@@ -32,6 +32,7 @@ uniform float u_fadeDistance;    // metres
 uniform float u_rayleigh;
 uniform float u_mie;
 uniform vec4 u_weather;
+uniform vec4 u_ssr;              // x enabled, y steps
 
 const float EARTH_R = 6371000.0;
 
@@ -118,7 +119,7 @@ void main()
     vec3 N = normalize(mix(vec3(0.0, 0.0, 1.0), waveNormal(wxy, amp), fade * 0.85 + 0.15));
 
     float NdotV = max(dot(N, V), 0.0);
-    float fresnel = 0.02 + 0.98 * pow(1.0 - NdotV, 5.0);
+    float fresnel = 0.02 + 0.98 * pow(max(1.0 - NdotV, 0.0), 5.0);
 
     // Sky reflection.
     vec3 R = reflect(viewDir, N);
@@ -133,6 +134,13 @@ void main()
     float overcast = u_weather.x;
     skyRefl = mix(skyRefl, vec3(gfsr_luma(skyRefl)) * vec3(0.9, 0.95, 1.0), overcast * 0.8);
     skyRefl *= mix(0.15, 1.0, day);
+
+    // SSR (clouds, terrain, ships, aircraft) always overrides the analytic sky.
+    if (u_ssr.x > 0.5 && dist < 8000.0) {
+        vec3 rEC = normalize(reflect(normalize(pEC), normalize(mix(vec3(0.0, 0.0, 1.0), N, 0.35) * u_eyeToEnu)));
+        vec4 ssr = gfsr_ssr(colorTexture, depthTexture, pEC, rEC, min(dist * 2.0, 6000.0), u_ssr.y, gfsr_ign(gl_FragCoord.xy));
+        skyRefl = mix(skyRefl, gfsr_toLinear(ssr.rgb), ssr.a * (1.0 - smoothstep(3000.0, 8000.0, dist)));
+    }
 
     // Deep water colouring.
     vec3 base = gfsr_toLinear(c);
